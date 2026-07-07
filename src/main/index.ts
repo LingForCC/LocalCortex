@@ -1,0 +1,250 @@
+/**
+ * Electron main process bootstrap.
+ *
+ * Spec: docs/architecture.md §4 (main/index.ts), §7; docs/tech-stack.md §6.5
+ * (app quit during a run).
+ *
+ * Wires together: SQLite (node:sqlite) + migrations, the MCP config file,
+ * repositories, agent runner providers, the per-rule scheduler (tick rules),
+ * the event ingress (event rules), the IPC handlers, and the BrowserWindow.
+ * On `before-quit`, signals in-flight runs to abort and tears down subprocesses.
+ */
+
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { openDatabase } from './db/client.js';
+import { runMigrations } from './db/migrate.js';
+import { RulesRepository } from './db/repositories/rules.js';
+import { RunsRepository } from './db/repositories/runs.js';
+import { SettingsRepository } from './db/repositories/settings.js';
+import { ensureConfigFile } from './mcp/config-loader.js';
+import { loadMcpServersFile } from './mcp/config-loader.js';
+import { Scheduler } from './scheduler/scheduler.js';
+import { ConcurrencyQueue } from './scheduler/concurrency.js';
+import { startIngress } from './events/ingress.js';
+import { executeRun, type RunnerProvider } from './agent/run-loop.js';
+import { ClaudeAgentRunner } from './agent/claude.js';
+import { CodexAgentRunner } from './agent/codex.js';
+import { registerRulesIpc } from './ipc/rules.js';
+import { registerRunsIpc } from './ipc/runs.js';
+import { registerServersIpc } from './ipc/servers.js';
+import { registerSettingsIpc } from './ipc/settings.js';
+import { LifecycleManager } from './mcp/lifecycle.js';
+import { logger, logError } from './observability/logger.js';
+import {
+  APP_DATA_DIRNAME,
+  MCP_SERVERS_FILENAME,
+  RUNS_SUBDIR,
+  DB_FILENAME,
+} from '@shared/constants';
+import type { FastifyInstance } from 'fastify';
+
+/**
+ * Globals statically defined by @electron-forge/plugin-vite (via Vite `define`)
+ * at build time. `MAIN_WINDOW_VITE_DEV_SERVER_URL` is the renderer dev-server
+ * URL in dev (`electron-forge start`) and `undefined` in the packaged build.
+ * The renderer name (`main_window` in forge.config.ts) drives the screaming-
+ * snake prefix.
+ */
+declare global {
+  var MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
+}
+
+// Module-scoped handles so we can tear them down on quit.
+let mainWindow: BrowserWindow | null = null;
+let scheduler: Scheduler | null = null;
+let ingressServer: FastifyInstance | null = null;
+const lifecycle = new LifecycleManager();
+const inFlightAborts = new Set<AbortController>();
+
+// Path to the bundled OmniFocus MCP server entry, resolved from the app bundle.
+// In dev this is the repo's sinks/ build output; in production, inside the asar.
+function omnifocusServerEntry(): string {
+  // The main bundle is at .vite/build/main.js; the omnifocus server is built to
+  // sinks/omnifocus-jxa/dist/index.js (shipped unpacked). Use app.getAppPath().
+  return join(app.getAppPath(), 'sinks', 'omnifocus-jxa', 'dist', 'index.js');
+}
+
+function buildRunnerProvider(): RunnerProvider {
+  const claude = new ClaudeAgentRunner();
+  const codex = new CodexAgentRunner();
+  return (backend) => (backend === 'claude' ? claude : codex);
+}
+
+async function bootstrap(): Promise<void> {
+  // 1. DB + migrations.
+  const dbPath = join(app.getPath('userData'), DB_FILENAME);
+  const db = openDatabase(dbPath);
+  const migrationResult = runMigrations(db);
+  logger.info(`DB migrated: ${JSON.stringify(migrationResult)}`);
+
+  const rulesRepo = new RulesRepository(db);
+  const runsRepo = new RunsRepository(db);
+  const settingsRepo = new SettingsRepository(db);
+  const settings = settingsRepo.get();
+
+  // 2. MCP config file (write bundled default on first launch).
+  const appDataRoot = join(homedir(), APP_DATA_DIRNAME);
+  const configPath = join(appDataRoot, MCP_SERVERS_FILENAME);
+  ensureConfigFile(configPath, omnifocusServerEntry());
+
+  // 3. Concurrency queue (shared by scheduler + ingress).
+  const queue = new ConcurrencyQueue({ concurrency: settings.concurrency });
+
+  // 4. Runner provider + a manual/tick/event enqueue path.
+  const runnerProvider = buildRunnerProvider();
+
+  const enqueueRun = async (
+    ruleId: string,
+    trigger: 'tick' | 'event' | 'manual',
+    event?: Parameters<typeof executeRun>[1]['event'],
+  ): Promise<number> => {
+    const ac = new AbortController();
+    inFlightAborts.add(ac);
+    return queue.add(async () => {
+      try {
+        const mcpConfig = loadMcpServersFile(configPath);
+        if (!mcpConfig) throw new Error('mcp-servers.json missing');
+        return executeRun(
+          {
+            rulesRepo,
+            runsRepo,
+            mcpConfig,
+            runnerProvider,
+            appDataRoot: join(appDataRoot, RUNS_SUBDIR),
+            trigger,
+          },
+          { ruleId, event },
+        );
+      } finally {
+        inFlightAborts.delete(ac);
+      }
+    });
+  };
+
+  // 5. Scheduler (tick rules only).
+  scheduler = new Scheduler({
+    onTick: (ruleId) => {
+      // Fire-and-forget; errors are recorded by the run-loop.
+      enqueueRun(ruleId, 'tick').catch((e) => logError(`scheduler tick failed for ${ruleId}`, e));
+    },
+  });
+  scheduler.rescheduleAll(rulesRepo.list(), settings.tickIntervalSeconds);
+
+  // 6. Event ingress (event rules).
+  ingressServer = await startIngress({
+    port: 4729,
+    getRules: () => rulesRepo.list().filter((r) => r.enabled),
+    onMatched: async (event, matched) => {
+      for (const rule of matched) {
+        enqueueRun(rule.id, 'event', event).catch((e) =>
+          logError(`event run failed for ${rule.id}`, e),
+        );
+      }
+    },
+    ...(settings.ingressSecret ? { sharedSecret: settings.ingressSecret } : {}),
+  });
+
+  // 7. IPC handlers.
+  registerRulesIpc(rulesRepo);
+  registerRunsIpc(runsRepo, (ruleId, eventPayload) =>
+    enqueueRun(
+      ruleId,
+      'manual',
+      eventPayload
+        ? { type: 'manual', timestamp: new Date().toISOString(), payload: eventPayload }
+        : undefined,
+    ),
+  );
+  registerServersIpc({ configPath, getRules: () => rulesRepo.list() });
+  registerSettingsIpc(settingsRepo);
+
+  // Re-schedule on rule changes.
+  ipcMain.on('rules:changed', () => {
+    scheduler?.rescheduleAll(rulesRepo.list(), settingsRepo.get().tickIntervalSeconds);
+  });
+
+  // 8. Window.
+  await createWindow();
+}
+
+async function createWindow(): Promise<void> {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    show: false,
+    title: 'LocalCortex',
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.on('ready-to-show', () => mainWindow?.show());
+
+  // Surface renderer load failures (otherwise they manifest as a blank window).
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logger.error(`Renderer failed to load: code=${code} desc=${desc} url=${url}`);
+  });
+  mainWindow.webContents.on('console-message', (_e, level, message) => {
+    // Forward renderer errors/warnings (level >= 2) to the main-process log so
+    // they surface for debugging instead of staying buried in DevTools.
+    if (level >= 2) logger.warn(`[renderer console] ${message}`);
+  });
+
+  // The Forge Vite plugin statically defines `MAIN_WINDOW_VITE_DEV_SERVER_URL`
+  // (a global, injected at build time via Vite's `define`) to the dev server URL
+  // in dev, and to `undefined` in the packaged build. See the `declare global`
+  // at the top of this file.
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    await mainWindow.loadFile(join(__dirname, '../renderer/main_window/src/renderer/index.html'));
+  }
+}
+
+// Single instance — focus the existing window on a second launch.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  void app.whenReady().then(() => {
+    bootstrap().catch((e) => {
+      logError('Failed to start LocalCortex', e);
+    });
+  });
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow().catch(logError);
+  });
+}
+
+// tech-stack.md §6.5: abort in-flight runs + kill subprocesses on quit.
+app.on('before-quit', (event) => {
+  if (inFlightAborts.size > 0) {
+    event.preventDefault();
+    for (const ac of inFlightAborts) ac.abort();
+    // Give in-flight runs a moment to unwind, then proceed with quit.
+    setTimeout(() => app.exit(0), 2000);
+    return;
+  }
+  scheduler?.clear();
+  lifecycle.teardown();
+  // Close the ingress server without blocking quit.
+  ingressServer?.close().catch(() => {});
+});
+
+// macOS: keep running until explicit quit (convention).
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});

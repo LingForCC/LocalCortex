@@ -1,0 +1,17 @@
+node_modules/
+.vite/
+out/
+dist/
+.release/
+coverage/
+playwright-report/
+test-results/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+sinks/omnifocus-jxa/node_modules/
+sinks/omnifocus-jxa/dist/
+
+# The docs are authoritative prose committed as-is; don't reformat them.
+docs/
