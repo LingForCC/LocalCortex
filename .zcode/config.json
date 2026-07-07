@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/.zcode/scripts/lint-and-typecheck.sh\"",
+              "timeout": 120,
+              "statusMessage": "Running lint and typecheck"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
