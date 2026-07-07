@@ -135,6 +135,7 @@ localcortex/
 │   │   │   ├── runner.ts          ← AgentRunner interface (backend-agnostic)
 │   │   │   ├── claude.ts          ← ClaudeAgentRunner (options.cwd, mcpServers)
 │   │   │   ├── codex.ts           ← CodexAgentRunner (workdir + .codex/config.toml)
+│   │   │   ├── cli-resolver.ts    ← resolves local codex/claude CLI path (settings → PATH → bundled)
 │   │   │   ├── prompt-builder.ts  ← renders event vars + assembles rule + status contract
 │   │   │   └── staging.ts         ← per-run workdir setup + teardown
 │   │   ├── mcp/
@@ -220,8 +221,9 @@ Every agent run spawns the MCP servers it needs; they die when the run ends. At 
 | MCP config | Per-call: `options.mcpServers` | Config-file: `.codex/config.toml` in the workdir |
 | Working dir | `options.cwd` | inferred from workdir / `startThread` |
 | Approval | `canUseTool` callback (not used in v1 — auto-execute) | `approval_policy = "never"` in config.toml |
+| CLI binary | `options.pathToClaudeCodeExecutable` | `codexPathOverride` (CodexOptions) |
 
-Both are handled by the `AgentRunner` abstraction; the difference is invisible to the rest of the app.
+Both are handled by the `AgentRunner` abstraction; the difference is invisible to the rest of the app. Each backend's CLI binary is resolved per run via [§6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary): an explicit path from Settings, else the first match on `PATH`, else the SDK's bundled vendored binary.
 
 ---
 
@@ -262,6 +264,23 @@ A queue caps concurrent agent runs (configurable, default e.g. 3). Excess runs q
 ### 6.5 Cadence — global default + per-rule override
 
 One global default interval (60 min). Any rule can override with its own `tickIntervalSeconds`. Because every tick is a full agent run, the interval is the primary cost control — lowering it raises token cost linearly with no steady-state savings.
+
+### 6.5.1 CLI resolution — local vs. bundled binary
+
+By default each backend's SDK spawns a **bundled, vendored** native binary resolved via `require.resolve` against a platform-specific npm package (`@openai/codex-darwin-arm64`, etc.). This means a globally installed `codex`/`claude` on the user's machine is ignored unless explicitly opted in.
+
+To run against the locally installed CLI instead, Settings exposes two optional fields:
+
+- **`codexCliPath`** — explicit path to a `codex` binary.
+- **`claudeCliPath`** — explicit path to a Claude Code (`claude`) binary.
+
+Resolution order (same for both backends, implemented in `agent/cli-resolver.ts`):
+
+1. **Explicit Settings path** — if set and non-empty, used as-is (validated on save: must exist and be executable).
+2. **`PATH` auto-detect** — otherwise a `which`-style scan of `process.env.PATH` for the first executable match.
+3. **SDK default** — if neither yields a path, the runner passes nothing and the SDK spawns its bundled binary (the default behavior).
+
+The provider reads the latest Settings on every run (not just at bootstrap), so changing a CLI path takes effect on the next run with **no app restart**. Bad paths are rejected at save time with an inline error in the Settings view; runtime failures from a wrong-but-executable binary still surface in run history.
 
 ### 6.6 Stop conditions — agent-signaled completion + structural backstop
 

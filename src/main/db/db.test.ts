@@ -230,4 +230,21 @@ describe('SettingsRepository', () => {
     repo.update({ ingressSecret: 'shh' });
     expect(repo.get().ingressSecret).toBe('shh');
   });
+
+  it('persists explicit CLI paths for the Codex and Claude backends', () => {
+    const repo = new SettingsRepository(db);
+    repo.update({ codexCliPath: '/usr/local/bin/codex', claudeCliPath: '/usr/local/bin/claude' });
+    const s = repo.get();
+    expect(s.codexCliPath).toBe('/usr/local/bin/codex');
+    expect(s.claudeCliPath).toBe('/usr/local/bin/claude');
+  });
+
+  it('round-trips cleared CLI paths (empty string) without resurrecting them', () => {
+    const repo = new SettingsRepository(db);
+    repo.update({ codexCliPath: '/usr/local/bin/codex', claudeCliPath: '/usr/local/bin/claude' });
+    repo.update({ codexCliPath: '', claudeCliPath: '' });
+    const s = repo.get();
+    expect(s.codexCliPath).toBe('');
+    expect(s.claudeCliPath).toBe('');
+  });
 });

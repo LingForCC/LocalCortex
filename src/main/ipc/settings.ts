@@ -1,19 +1,49 @@
 /**
- * IPC handlers for the `settings:*` channels — global tick interval + concurrency.
+ * IPC handlers for the `settings:*` channels — global tick interval, concurrency,
+ * ingress secret, and explicit CLI paths for the Codex / Claude Code backends.
  *
- * Spec: docs/architecture.md §6.4, §6.5.
+ * Spec: docs/architecture.md §6.4, §6.5, §6.5.1.
  */
 
 import { ipcMain } from 'electron';
 import { IPC, UpdateSettingsMessageSchema } from '@shared/schemas/ipc-schema';
 import type { SettingsRepository } from '../db/repositories/settings.js';
+import type { AppSettings } from '@shared/types';
+import { isExecutablePath } from '../agent/cli-resolver.js';
+
+/** Discriminated result returned over `settings:update`. */
+export type UpdateSettingsResult =
+  | { ok: true; settings: AppSettings }
+  | { ok: false; error: string };
 
 export function registerSettingsIpc(settingsRepo: SettingsRepository): void {
   ipcMain.handle(IPC.SETTINGS_GET, async () => settingsRepo.get());
 
-  ipcMain.handle(IPC.SETTINGS_UPDATE, async (_evt, raw) => {
+  ipcMain.handle(IPC.SETTINGS_UPDATE, async (_evt, raw): Promise<UpdateSettingsResult> => {
     const parsed = UpdateSettingsMessageSchema.parse(raw ?? {});
-    // Build a clean Partial<AppSettings>: null ingressSecret → '' (clear).
+
+    // Validate any explicit CLI paths before persisting (arch §6.5.1). An empty
+    // string is valid (means auto-detect / SDK default). Surface failures as a
+    // structured result so the renderer can show them inline.
+    if (parsed.codexCliPath !== undefined && parsed.codexCliPath !== null) {
+      if (!isExecutablePath(parsed.codexCliPath)) {
+        return {
+          ok: false,
+          error: `Codex CLI path does not exist or is not executable: "${parsed.codexCliPath}"`,
+        };
+      }
+    }
+    if (parsed.claudeCliPath !== undefined && parsed.claudeCliPath !== null) {
+      if (!isExecutablePath(parsed.claudeCliPath)) {
+        return {
+          ok: false,
+          error: `Claude Code CLI path does not exist or is not executable: "${parsed.claudeCliPath}"`,
+        };
+      }
+    }
+
+    // Build a clean Partial<AppSettings>: null → '' (clear) for the nullable
+    // string fields.
     const patch: Parameters<SettingsRepository['update']>[0] = {};
     if (parsed.tickIntervalSeconds !== undefined)
       patch.tickIntervalSeconds = parsed.tickIntervalSeconds;
@@ -21,6 +51,13 @@ export function registerSettingsIpc(settingsRepo: SettingsRepository): void {
     if (parsed.ingressSecret !== undefined) {
       patch.ingressSecret = parsed.ingressSecret ?? '';
     }
-    return settingsRepo.update(patch);
+    if (parsed.codexCliPath !== undefined) {
+      patch.codexCliPath = parsed.codexCliPath ?? '';
+    }
+    if (parsed.claudeCliPath !== undefined) {
+      patch.claudeCliPath = parsed.claudeCliPath ?? '';
+    }
+    const settings = settingsRepo.update(patch);
+    return { ok: true, settings };
   });
 }

@@ -29,6 +29,10 @@ export class SettingsRepository {
       ...(typeof stored['ingressSecret'] === 'string'
         ? { ingressSecret: stored['ingressSecret'] }
         : {}),
+      ...(typeof stored['codexCliPath'] === 'string' ? { codexCliPath: stored['codexCliPath'] } : {}),
+      ...(typeof stored['claudeCliPath'] === 'string'
+        ? { claudeCliPath: stored['claudeCliPath'] }
+        : {}),
     });
   }
 

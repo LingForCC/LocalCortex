@@ -10,6 +10,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/schemas/ipc-schema';
 import type { Rule, Run, AppSettings, RuleWithBookkeeping } from '@shared/types';
+import type { UpdateSettingsResult } from './ipc/settings.js';
 
 const api = {
   rules: {
@@ -40,7 +41,7 @@ const api = {
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),
-    update: (patch: Partial<AppSettings>): Promise<AppSettings> =>
+    update: (patch: Partial<AppSettings>): Promise<UpdateSettingsResult> =>
       ipcRenderer.invoke(IPC.SETTINGS_UPDATE, patch),
   },
 };

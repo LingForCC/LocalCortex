@@ -15,6 +15,7 @@ The `AgentRunner` abstraction hides the two SDKs' differences behind one interfa
 | MCP config | per-call: `options.mcpServers` | config file: `.codex/config.toml` in the workdir |
 | Working dir | `options.cwd` | the workdir the SDK launches in |
 | Approval (auto-execute) | `permissionMode: 'bypassPermissions'` | `approval_policy = "never"` in config.toml |
+| CLI binary override | `pathToClaudeCodeExecutable` | `codexPathOverride` |
 | Result usage | `usage.input_tokens` / `output_tokens` | `turn.usage.input_tokens` / `output_tokens` |
 
 Everything else — staging the workdir, resolving MCP servers, building the prompt, recording the run, checking stop conditions — is **shared** and lives in the run-loop.
@@ -27,6 +28,10 @@ There's no behavioral difference from the app's perspective; pick based on which
 
 - **Claude** — set `ANTHROPIC_API_KEY` (and/or install Claude Code). MCP config is passed per-call; nothing is written to disk.
 - **Codex** — set `OPENAI_API_KEY` and have the Codex CLI resolvable. MCP config is written to a per-run `.codex/config.toml` in the staged workdir, then **deleted at run teardown** (the file contains plaintext tokens — cleanup is security-critical).
+
+### Which CLI binary runs?
+
+By default each backend's SDK spawns its own **bundled, vendored** binary (resolved from a platform-specific npm package), so a globally installed `codex`/`claude` on your machine is **ignored**. To run against your locally installed CLI instead, set **Codex CLI path** / **Claude Code CLI path** in [Settings](../settings/README.md) (or leave blank to auto-detect on `PATH`). See [design: §6.5.1 CLI resolution](../../architecture.md#651-cli-resolution--local-vs-bundled-binary).
 
 > **Codex is the harder path.** Config-file MCP + workdir staging mean the Codex runner carries more complexity. See [design: known constraints §8](../../architecture.md#8-known-constraints--risks).
 
@@ -83,5 +88,6 @@ The agent can draft edits in your repo for you to review. MCP config is staged i
 ## Related
 - [Rules](../rules/README.md) — `backend` is a rule field.
 - [MCP sources](../mcp-sources/README.md) — how servers are attached per backend.
+- [Settings](../settings/README.md) — `codexCliPath` / `claudeCliPath` pin which CLI binary each backend spawns.
 - [Stop conditions](../stop-conditions/README.md) — status parsing across both backends.
-- [design: §5.5 backend asymmetry](../../architecture.md#55-mcp-config-asymmetry-between-backends).
+- [design: §5.5 backend asymmetry](../../architecture.md#55-mcp-config-asymmetry-between-backends), [§6.5.1 CLI resolution](../../architecture.md#651-cli-resolution--local-vs-bundled-binary).

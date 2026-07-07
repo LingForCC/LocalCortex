@@ -191,6 +191,8 @@ describe('matchEventsToRules', () => {
 ### 6.2 Subprocess lifecycle (MCP servers, agent CLIs)
 The app spawns child processes (MCP servers per run, Codex/Claude via SDK). Leaks here are subtle — a process that doesn't die holds credentials and resources. **Mitigation:** centralized lifecycle manager that tracks every spawned PID and kills them on run teardown and app quit. Test the teardown path specifically.
 
+By default the SDKs spawn their own **bundled, vendored** native binary (resolved via `require.resolve` against a platform-specific npm package), so a globally installed `codex`/`claude` is ignored unless the user opts in via the `codexCliPath` / `claudeCliPath` Settings fields (see [architecture.md §6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary)). When set, that path is validated (exists + executable) on save and passed to the SDK as `codexPathOverride` / `pathToClaudeCodeExecutable`.
+
 ### 6.3 Codex per-run `config.toml` contains plaintext tokens
 Each Codex run writes a `.codex/config.toml` with the MCP server credentials into the workdir. **Mitigation:** the staging module deletes the workdir at run teardown, always. This is a security-critical cleanup — test it.
 

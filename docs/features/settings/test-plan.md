@@ -7,7 +7,8 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 ## In scope
 - `SettingsRepository.get` (defaults on empty table) + `.update` (partial merge).
 - `ConcurrencyQueue` (cap enforcement, FIFO, error isolation, drain).
-- `settings:get/update` IPC (incl. `ingressSecret: null` → clear).
+- `settings:get/update` IPC (incl. `ingressSecret: null` → clear; CLI path validation).
+- `cli-resolver.ts` (explicit → PATH → undefined fallback, `isExecutablePath`).
 
 ## Out of scope
 - Scheduler cadence using the value → [Triggers](../triggers/test-plan.md).
@@ -35,6 +36,22 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-R2 | partial update merges (set concurrency, tick unchanged) | ✅ existing |
 | SE-R3 | second update preserves the first | ✅ existing |
 | SE-R4 | ingress secret persists | ✅ existing |
+| SE-R5 | codex/claude CLI paths persist | ✅ existing |
+| SE-R6 | clearing CLI paths (`''`) doesn't resurrect old values | ✅ existing |
+
+### cli-resolver — `src/main/agent/cli-resolver.test.ts`
+**Status:** ✅ covered — 10 cases.
+
+| # | Case | Expected |
+| --- | --- | --- |
+| SE-C1 | explicit path returned as-is (non-empty) | ✅ existing |
+| SE-C2 | explicit path is trimmed | ✅ existing |
+| SE-C3 | empty/undefined explicit → PATH lookup (string\|undefined, no throw) | ✅ existing |
+| SE-C4 | `resolveOnPath` finds `node` on PATH | ✅ existing |
+| SE-C5 | `resolveOnPath` returns undefined for missing binary / unset PATH | ✅ existing |
+| SE-C6 | `isExecutablePath('')` → true (auto-detect) | ✅ existing |
+| SE-C7 | `isExecutablePath` rejects non-existent path | ✅ existing |
+| SE-C8 | `isExecutablePath` accepts an executable `node` | ✅ existing |
 
 ### ConcurrencyQueue — `src/main/scheduler/concurrency.test.ts`
 **Status:** ✅ covered — 6 cases.
@@ -51,7 +68,7 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 ---
 
 ## IPC — `src/main/ipc/settings.ts`
-**Status:** not unit-tested (Electron-coupled). Note: `ingressSecret: null` is normalized to `''` (clear) by the handler.
+**Status:** not unit-tested (Electron-coupled). Notes: `ingressSecret: null` is normalized to `''` (clear) by the handler; the handler validates CLI paths on save (`existsSync` + `accessSync(X_OK)`) and returns `{ ok: false, error }` instead of throwing on a bad path.
 
 | # | Case | Expected |
 | --- | --- | --- |
@@ -60,6 +77,10 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-I3 | `settings:update { ingressSecret: 'x' }` stores it | secret set |
 | SE-I4 | `settings:update { ingressSecret: null }` clears it | secret unset |
 | SE-I5 | invalid tick (<300) rejected by schema | throws |
+| SE-I6 | `settings:update { codexCliPath: '/bad' }` (non-existent) | `{ ok: false, error }` |
+| SE-I7 | `settings:update { claudeCliPath: '/bad' }` (non-existent) | `{ ok: false, error }` |
+| SE-I8 | `settings:update { codexCliPath: '' }` clears it | `{ ok: true }`, path unset |
+| SE-I9 | `settings:update { codexCliPath: null }` clears it | `{ ok: true }`, path unset |
 
 ---
 
@@ -82,6 +103,8 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-M2 | Concurrency cap bounds parallel runs | cap=1; trigger 3 runs quickly | runs execute serially (no overlap) |
 | SE-M3 | Secret gates the ingress | set a secret; POST without header | 401; with header → 200 |
 | SE-M4 | Settings persist across restart | set values, quit, relaunch | values restored |
+| SE-M5 | CLI path applies without restart | set `codexCliPath` to a local binary; trigger a run | next run spawns the local binary (verify via logs) |
+| SE-M6 | Bad CLI path rejected on save | enter a non-existent path → Save | inline error; value not persisted |
 
 ---
 

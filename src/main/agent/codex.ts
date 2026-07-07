@@ -34,6 +34,12 @@ export interface CodexRunnerOptions {
   codexOptions?: CodexOptions;
   /** Default model id. */
   model?: string;
+  /**
+   * Path to a locally installed `codex` CLI to spawn instead of the SDK's
+   * bundled vendored binary (arch §6.5.1). Resolved by cli-resolver.ts and
+   * passed through to the SDK as `codexPathOverride`. `undefined` → SDK default.
+   */
+  codexPathOverride?: string;
 }
 
 export class CodexAgentRunner implements AgentRunner {
@@ -45,7 +51,16 @@ export class CodexAgentRunner implements AgentRunner {
     let codex: Codex;
     let thread: Thread;
     try {
-      codex = new Codex(this.opts.codexOptions ?? {});
+      // Merge the SDK base options with an optional local-CLI override
+      // (arch §6.5.1). When codexPathOverride is undefined the SDK resolves its
+      // bundled vendored binary (default behavior).
+      const codexOptions: CodexOptions = {
+        ...(this.opts.codexOptions ?? {}),
+        ...(this.opts.codexPathOverride
+          ? { codexPathOverride: this.opts.codexPathOverride }
+          : {}),
+      };
+      codex = new Codex(codexOptions);
       thread = codex.startThread({
         workingDirectory: input.workdir,
         sandboxMode: toCodexSandbox(input.sandbox),

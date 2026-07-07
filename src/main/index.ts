@@ -26,6 +26,7 @@ import { startIngress } from './events/ingress.js';
 import { executeRun, type RunnerProvider } from './agent/run-loop.js';
 import { ClaudeAgentRunner } from './agent/claude.js';
 import { CodexAgentRunner } from './agent/codex.js';
+import { resolveCodexPath, resolveClaudePath } from './agent/cli-resolver.js';
 import { registerRulesIpc } from './ipc/rules.js';
 import { registerRunsIpc } from './ipc/runs.js';
 import { registerServersIpc } from './ipc/servers.js';
@@ -38,6 +39,7 @@ import {
   RUNS_SUBDIR,
   DB_FILENAME,
 } from '@shared/constants';
+import type { AppSettings } from '@shared/types';
 import type { FastifyInstance } from 'fastify';
 
 /**
@@ -66,10 +68,25 @@ function omnifocusServerEntry(): string {
   return join(app.getAppPath(), 'sinks', 'omnifocus-jxa', 'dist', 'index.js');
 }
 
-function buildRunnerProvider(): RunnerProvider {
-  const claude = new ClaudeAgentRunner();
-  const codex = new CodexAgentRunner();
-  return (backend) => (backend === 'claude' ? claude : codex);
+/**
+ * Build a RunnerProvider that resolves each backend's CLI binary fresh per
+ * call from the latest settings (arch §6.5.1). Reading settings on each run
+ * (rather than once at bootstrap) means a Settings change to codexCliPath /
+ * claudeCliPath takes effect on the next run with no app restart. Constructing
+ * the runner instances is cheap; the SDK doesn't spawn until `run()` is called.
+ */
+function buildRunnerProvider(getSettings: () => AppSettings): RunnerProvider {
+  return (backend) => {
+    const settings = getSettings();
+    if (backend === 'claude') {
+      return new ClaudeAgentRunner({
+        pathToClaudeCodeExecutable: resolveClaudePath(settings.claudeCliPath),
+      });
+    }
+    return new CodexAgentRunner({
+      codexPathOverride: resolveCodexPath(settings.codexCliPath),
+    });
+  };
 }
 
 async function bootstrap(): Promise<void> {
@@ -93,7 +110,9 @@ async function bootstrap(): Promise<void> {
   const queue = new ConcurrencyQueue({ concurrency: settings.concurrency });
 
   // 4. Runner provider + a manual/tick/event enqueue path.
-  const runnerProvider = buildRunnerProvider();
+  //    Pass a getter (not a snapshot) so settings changes apply to the next
+  //    run without an app restart (arch §6.5.1).
+  const runnerProvider = buildRunnerProvider(() => settingsRepo.get());
 
   const enqueueRun = async (
     ruleId: string,

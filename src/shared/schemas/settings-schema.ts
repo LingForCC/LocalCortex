@@ -24,4 +24,15 @@ export const AppSettingsSchema = z.object({
   concurrency: z.number().int().positive().default(DEFAULT_CONCURRENCY),
   /** Optional shared secret required in the ingress POST header (arch §8). */
   ingressSecret: z.string().optional(),
+  /**
+   * Optional explicit path to a locally installed `codex` CLI. When unset/
+   * empty, the runner auto-detects on PATH and otherwise falls back to the
+   * SDK's bundled vendored binary (arch §6.5.1).
+   */
+  codexCliPath: z.string().optional(),
+  /**
+   * Optional explicit path to a locally installed `claude` (Claude Code) CLI.
+   * Same resolution semantics as `codexCliPath` (arch §6.5.1).
+   */
+  claudeCliPath: z.string().optional(),
 });

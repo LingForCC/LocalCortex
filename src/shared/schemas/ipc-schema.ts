@@ -70,4 +70,19 @@ export const UpdateSettingsMessageSchema = z.object({
   tickIntervalSeconds: z.number().int().positive().min(300).optional(),
   concurrency: z.number().int().positive().optional(),
   ingressSecret: z.string().nullable().optional(),
+  /** Explicit path to a local `codex` CLI. null clears it (auto-detect/default). */
+  codexCliPath: z.string().nullable().optional(),
+  /** Explicit path to a local Claude Code CLI. null clears it (auto-detect/default). */
+  claudeCliPath: z.string().nullable().optional(),
+});
+
+/**
+ * Result of `settings:update`. The handler validates CLI paths (exists +
+ * executable) before persisting; on failure it returns `{ ok: false, error }`
+ * instead of throwing, so the renderer can surface the message inline.
+ */
+export const UpdateSettingsResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  settings: z.any().optional(),
 });

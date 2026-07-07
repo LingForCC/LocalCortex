@@ -11,7 +11,12 @@ interface SettingsState {
   serverNames: string[];
   placeholders: string[];
   load: () => Promise<void>;
-  update: (patch: Partial<AppSettings>) => Promise<void>;
+  /**
+   * Persist a partial settings update. Resolves to `undefined` on success or
+   * an error message string when the main process rejects the update (e.g. an
+   * invalid CLI path). The caller surfaces it; the store does not throw.
+   */
+  update: (patch: Partial<AppSettings>) => Promise<string | undefined>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -35,7 +40,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 
   update: async (patch) => {
-    const settings = await window.api.settings.update(patch);
-    set({ settings });
+    const result = await window.api.settings.update(patch);
+    if (!result.ok) return result.error;
+    set({ settings: result.settings });
+    return undefined;
   },
 }));

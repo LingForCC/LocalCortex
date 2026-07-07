@@ -134,5 +134,5 @@ becomes
 ## Related
 - [Rules](../rules/README.md) — the trigger field is part of a rule.
 - [MCP sources](../mcp-sources/README.md) — what the agent calls during the run.
-- [Settings](../settings/README.md) — global tick default, concurrency, ingress secret.
+- [Settings](../settings/README.md) — global tick default, concurrency, ingress secret, CLI paths.
 - [design: §6.7 event ingress](../../architecture.md#67-event-ingress--local-http-listener), [§6.5 cadence](../../architecture.md#65-cadence--global-default--per-rule-override).
