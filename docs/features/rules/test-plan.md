@@ -70,16 +70,16 @@ Covers rule **authoring, persistence, and CRUD**. The behavior of *running* a ru
 
 ## Integration / E2E (Playwright)
 
-**Status:** not yet implemented (E2E harness exists at `playwright/e2e.spec.ts` but only covers app launch). Planned cases:
+**Status:** ✅ covered — `playwright/rules.spec.ts` (6 cases), on the shared isolation fixture `playwright/fixtures/app.ts` (isolated `--user-data-dir` + `HOME` so tests never touch the operator's real DB or MCP config).
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| R-E1 | Create a rule via the UI | Rules tab → New rule → fill form → Create | Row appears in table; reload persists |
-| R-E2 | Edit a rule | Edit a row → change name → Save | Row updates |
-| R-E3 | Toggle enabled | Click the switch on a row | `enabled` flips; persists across reload |
-| R-E4 | Delete a rule | Delete → confirm | Row removed |
-| R-E5 | Validation feedback | Submit with empty rule text | Inline error shown; nothing saved |
-| R-E6 | Run-now enqueues | Click Run on a rule | A `runs` row appears (status may be `error` without credentials — that's fine; the enqueue is what's tested) |
+| R-E1 | Create a rule via the UI | Rules tab → New rule → fill form → Create | Row appears in table; reload persists ✅ existing |
+| R-E2 | Edit a rule | Edit a row → change name → Save | Row updates ✅ existing |
+| R-E3 | Toggle enabled | Click the switch on a row | `enabled` flips; persists across reload ✅ existing |
+| R-E4 | Delete a rule | Delete → confirm | Row removed ✅ existing |
+| R-E5 | Validation feedback | Submit with empty rule text | Inline error shown; nothing saved ✅ existing |
+| R-E6 | Run-now enqueues | Click Run on a rule | A `runs` row appears (status may be `error` without credentials — that's fine; the enqueue is what's tested) ✅ existing |
 
 ---
 

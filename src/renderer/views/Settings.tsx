@@ -16,9 +16,16 @@ import { useSettingsStore } from '@renderer/store/settings';
 export function Settings() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
+  const load = useSettingsStore((s) => s.load);
 
   const [tick, setTick] = React.useState(String(settings.tickIntervalSeconds));
   const [concurrency, setConcurrency] = React.useState(String(settings.concurrency));
+
+  // Load persisted settings on mount; without this the inputs show the store's
+  // hardcoded defaults instead of what's in the DB.
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   React.useEffect(() => {
     setTick(String(settings.tickIntervalSeconds));

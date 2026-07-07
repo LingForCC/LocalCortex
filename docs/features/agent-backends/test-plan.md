@@ -30,7 +30,7 @@ Real agent execution is **not** unit-tested (it needs live API keys + CLIs and i
 ## Unit tests
 
 ### Run-loop with a stub runner — `src/main/agent/run-loop.test.ts`
-**Status:** ✅ covered — 6 cases. Uses an in-memory DB + a stub `AgentRunner` returning canned transcripts, so the full enqueue → stage → resolve → prompt → run → record → stop-check path is exercised without any SDK.
+**Status:** ✅ covered — 7 cases. Uses an in-memory DB + a stub `AgentRunner` returning canned transcripts, so the full enqueue → stage → resolve → prompt → run → record → stop-check path is exercised without any SDK.
 
 | # | Case | Expected |
 | --- | --- | --- |
@@ -40,6 +40,9 @@ Real agent execution is **not** unit-tested (it needs live API keys + CLIs and i
 | A-U4 | event payload renders into prompt | ✅ existing |
 | A-U5 | **Codex: `.codex/config.toml` exists during run; workdir deleted after** | ✅ existing (security-critical) |
 | A-U6 | undefined MCP server → throws before run | ✅ existing |
+| A-U7 | runner fails post-staging → recorded as an `error` run (no throw); setup failures still throw | ✅ existing |
+
+> A-U6 vs A-U7 together fix the `executeRun` contract: **setup** problems (missing rule, undefined MCP server, placeholder tokens at staging) throw before there's anything to record; an **agent-side** failure (e.g. missing API key) is recorded as an `error` run so it shows up in Run history — the safety net under auto-execute.
 
 ### Config serialization — `src/main/mcp/config.test.ts`
 **Status:** ✅ covered — 10 cases (see [MCP sources test-plan](../mcp-sources/test-plan.md)). Includes the Codex TOML shape (`[mcp_servers."name"]`, env table, `approval_policy = "never"`) and placeholder detection that both runners depend on.

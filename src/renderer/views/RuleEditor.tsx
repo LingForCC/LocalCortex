@@ -36,7 +36,13 @@ export function RuleEditor({ rule, onDone }: { rule?: Rule; onDone?: () => void 
   const update = useRulesStore((s) => s.update);
   const serverNames = useSettingsStore((s) => s.serverNames);
 
-  const [draft, setDraft] = React.useState<Rule>(rule ?? newRule());
+  // The list passes a partial/empty object when creating a new rule (`{} as Rule`),
+  // so treat it as "new" whenever the incoming rule lacks the trigger
+  // discriminator that every persisted rule has. `isEditing` drives draft init,
+  // the title, and the create-vs-update branch in save().
+  const isEditing = Boolean(rule && rule.trigger);
+  const initialDraft = isEditing ? rule! : newRule();
+  const [draft, setDraft] = React.useState<Rule>(initialDraft);
   const [mcpServersText, setMcpServersText] = React.useState((rule?.mcpServers ?? []).join(', '));
   const [error, setError] = React.useState<string | null>(null);
 
@@ -68,7 +74,7 @@ export function RuleEditor({ rule, onDone }: { rule?: Rule; onDone?: () => void 
     }
 
     try {
-      if (rule) await update(toSave);
+      if (isEditing) await update(toSave);
       else await create(toSave);
       onDone?.();
     } catch (e) {
@@ -79,7 +85,7 @@ export function RuleEditor({ rule, onDone }: { rule?: Rule; onDone?: () => void 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{rule ? `Edit ${rule.name}` : 'New rule'}</CardTitle>
+        <CardTitle>{isEditing ? `Edit ${rule!.name}` : 'New rule'}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
@@ -224,7 +230,7 @@ export function RuleEditor({ rule, onDone }: { rule?: Rule; onDone?: () => void 
               Cancel
             </Button>
           )}
-          <Button onClick={() => void save()}>{rule ? 'Save' : 'Create'}</Button>
+          <Button onClick={() => void save()}>{isEditing ? 'Save' : 'Create'}</Button>
         </div>
       </CardContent>
     </Card>

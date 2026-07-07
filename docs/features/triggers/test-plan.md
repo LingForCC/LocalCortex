@@ -22,7 +22,7 @@ Covers **cadence math**, **event matching**, **template rendering**, and the **i
 | --- | --- | --- |
 | Unit (pure logic) | Vitest | `src/**/*.test.ts` |
 | Integration (HTTP) | Vitest + Fastify `inject` | planned |
-| E2E | Playwright / shell `curl` | planned |
+| E2E | Playwright / shell `curl` | `playwright/triggers.spec.ts` (partial) |
 | Manual | operator | — |
 
 ---
@@ -106,11 +106,11 @@ Covers **cadence math**, **event matching**, **template rendering**, and the **i
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| T-E1 | Real Codex hook fires an event rule | Install `codex-hook.sh`; complete a Codex session in a watched workdir | A run appears in Run history with the event payload |
-| T-E2 | `curl` to ingress fires a rule | `curl -X POST localhost:4729/event ...` | Run appears |
-| T-E3 | Filter excludes an event | POST an event whose `workdir` doesn't match the filter | `matched:0`, no run |
-| T-E4 | Tick rule fires on schedule | Create a tick rule with `intervalSeconds:300`; wait | Run appears after ~5 min |
-| T-E5 | Editing a tick rule's interval reschedules it | Change interval; observe tick timing | Next tick respects new interval |
+| T-E1 | Real Codex hook fires an event rule | Install `codex-hook.sh`; complete a Codex session in a watched workdir | A run appears in Run history with the event payload — **manual** (needs a live Codex session) |
+| T-E2 | `curl` to ingress fires a rule | `curl -X POST localhost:4729/event ...` | Run appears ✅ existing (`playwright/triggers.spec.ts`) |
+| T-E3 | Filter excludes an event | POST an event whose `workdir` doesn't match the filter | `matched:0`, no run ✅ existing (`playwright/triggers.spec.ts`) |
+| T-E4 | Tick rule fires on schedule | Create a tick rule with `intervalSeconds:300`; wait | Run appears after ~5 min — **manual** (gated by the 300s floor) |
+| T-E5 | Editing a tick rule's interval reschedules it | Change interval; observe tick timing | Next tick respects new interval — **manual** |
 
 ---
 

@@ -50,7 +50,10 @@ export const SetRuleEnabledMessageSchema = z.object({
 // --- Runs -------------------------------------------------------------------
 
 export const ListRunsMessageSchema = z.object({
-  ruleId: z.string().min(1).optional(),
+  // null/undefined both mean "no rule filter" — the renderer store + preload
+  // pass null (see window.api.runs.list), so accept it here rather than forcing
+  // a renderer-side normalization.
+  ruleId: z.string().min(1).nullable().optional(),
   limit: z.number().int().positive().max(500).default(100),
 });
 

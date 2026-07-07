@@ -20,7 +20,7 @@ Covers the **config-file loader**, **name resolution**, **per-backend serializat
 | Type | Tool | Where |
 | --- | --- | --- |
 | Unit (pure logic + temp FS) | Vitest | `src/**/*.test.ts` |
-| E2E | Playwright (Sources view) | planned |
+| E2E | Playwright (Sources view) | `playwright/sources.spec.ts` |
 | Manual | operator | — |
 
 ---
@@ -99,10 +99,10 @@ Covers the **config-file loader**, **name resolution**, **per-backend serializat
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab before filling tokens | chips show "· placeholder" |
-| M-E2 | Refresh picks up edits | Edit file externally; click Refresh | updated list/raw config |
-| M-E3 | Adding a new server + referencing it works | Add `jira-acme`, reference in a rule, run | agent can call jira tools |
-| M-E4 | First-launch provisioning | delete `~/.localcortex/mcp-servers.json`, relaunch app | file recreated with `0600` perms |
+| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab before filling tokens | chips show "· placeholder" ✅ existing (`playwright/sources.spec.ts`) |
+| M-E2 | Refresh picks up edits | Edit file externally; click Refresh | updated list/raw config ✅ existing (`playwright/sources.spec.ts`) |
+| M-E3 | Adding a new server + referencing it works | Add `jira-acme`, reference in a rule, run | agent can call jira tools — **manual** (needs a live agent run) |
+| M-E4 | First-launch provisioning | delete `~/.localcortex/mcp-servers.json`, relaunch app | file recreated with `0600` perms ✅ existing (`playwright/sources.spec.ts`) |
 
 ---
 

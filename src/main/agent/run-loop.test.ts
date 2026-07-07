@@ -205,6 +205,43 @@ describe('executeRun', () => {
       ),
     ).rejects.toThrow(/nope/);
   });
+
+  it('records an error run (instead of throwing) when the runner fails post-staging', async () => {
+    // Matches the executeRun contract: setup problems throw, but an agent-side
+    // failure (e.g. missing API key) is recorded as an error run so it shows up
+    // in Run history — the safety net under auto-execute. See JSDoc on executeRun.
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    rulesRepo.create(makeRule());
+
+    const failingRunner: AgentRunner = {
+      backend: 'claude',
+      async run(): Promise<RunResult> {
+        throw new Error('Claude agent run failed: ANTHROPIC_API_KEY not set');
+      },
+    };
+
+    const runId = await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => failingRunner,
+        appDataRoot: appData,
+        trigger: 'manual',
+      },
+      { ruleId: 'r1' },
+    );
+
+    const run = runsRepo.get(runId);
+    expect(run).not.toBeNull();
+    expect(run?.status).toBe('error');
+    expect(run?.error).toMatch(/ANTHROPIC_API_KEY/);
+    expect(run?.prompt).toContain('STATUS CONTRACT');
+    expect(run?.toolCalls).toEqual([]);
+    // durationMs is recorded and non-negative (observability test-plan O-L gap).
+    expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+  });
 });
 
 afterEach(() => {

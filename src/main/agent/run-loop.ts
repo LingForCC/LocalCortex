@@ -95,6 +95,22 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
 
   const cwd = rule.backend === 'codex' ? staged.cwd : resolveCwd(rule, appDataRoot);
 
+  /** Apply the stop-condition decision after a run (shared by success + error paths). */
+  const applyStopCheck = (parsedStatus: ReturnType<typeof parseStatusBlock>): void => {
+    const decision = evaluateStop({
+      parsedStatus,
+      runCount,
+      maxRuns: rule.maxRuns,
+      expiresAt: rule.expiresAt,
+      // settings carries no global maxRuns override today; evaluateStop falls
+      // back to the built-in DEFAULT_MAX_RUNS for rules that don't set one.
+      now,
+    });
+    if (decision.shouldDisable && decision.reason) {
+      rulesRepo.setEnabled(rule.id, false, decision.reason);
+    }
+  };
+
   let runId: number;
   try {
     // 5. Run the agent.
@@ -130,18 +146,30 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
     runId = runsRepo.create(newRun);
 
     // 7. Stop check.
-    const decision = evaluateStop({
-      parsedStatus,
-      runCount,
-      maxRuns: rule.maxRuns,
-      expiresAt: rule.expiresAt,
-      // settings carries no global maxRuns override today; evaluateStop falls
-      // back to the built-in DEFAULT_MAX_RUNS for rules that don't set one.
-      now,
+    applyStopCheck(parsedStatus);
+  } catch (e) {
+    // The agent run itself failed (e.g. missing API key, SDK error). This is a
+    // post-staging failure: we have a prompt and a staged workdir, so — per
+    // architecture.md §7 step 6 ("every run is recorded") — record it as an
+    // error run rather than letting it vanish. Observability is the safety net
+    // under auto-execute; an unrecorded failure would be invisible to the
+    // operator. Pre-staging failures (missing rule, undefined MCP server) still
+    // throw from above, before there is anything meaningful to record.
+    const durationMs = Date.now() - startMs;
+    const message = e instanceof Error ? e.message : String(e);
+    runId = runsRepo.create({
+      ruleId: rule.id,
+      trigger,
+      startedAt,
+      endedAt: now().toISOString(),
+      status: 'error',
+      prompt,
+      toolCalls: [],
+      durationMs,
+      error: message,
+      eventPayload: req.event?.payload,
     });
-    if (decision.shouldDisable && decision.reason) {
-      rulesRepo.setEnabled(rule.id, false, decision.reason);
-    }
+    applyStopCheck(null);
   } finally {
     // 8. Teardown — security-critical for Codex (deletes config.toml w/ tokens).
     staged.cleanup();

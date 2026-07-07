@@ -19,6 +19,7 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | Type | Tool | Where |
 | --- | --- | --- |
 | Unit | Vitest | `src/**/*.test.ts` |
+| E2E | Playwright (Settings view) | `playwright/settings.spec.ts` |
 | Manual | operator | — |
 
 ---
@@ -59,6 +60,17 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-I3 | `settings:update { ingressSecret: 'x' }` stores it | secret set |
 | SE-I4 | `settings:update { ingressSecret: null }` clears it | secret unset |
 | SE-I5 | invalid tick (<300) rejected by schema | throws |
+
+---
+
+## E2E (Playwright)
+
+**Status:** ✅ covered — `playwright/settings.spec.ts` (2 cases), on the shared isolation fixture.
+
+| # | Case | Steps | Expected |
+| --- | --- | --- | --- |
+| SE-E1 | Settings persist across reload | change tick interval + concurrency → Save → relaunch | both values restored ✅ existing (automates the former SE-M4) |
+| SE-E2 | Invalid tick (< 300) rejected | set tick to 100 → Save → relaunch | schema rejects; default still in place ✅ existing (E2E equivalent of SE-I5) |
 
 ---
 

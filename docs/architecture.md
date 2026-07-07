@@ -349,7 +349,7 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
    b. Evaluates the rule against that state.
    c. Performs writes to the sink via MCP as the rule directs.
    d. Emits a status block (`{"status":"active|done|error","reason":"..."}`) at the end of its final message.
-6. **Run recorder** logs every tool call, token cost, result, and the parsed status.
+6. **Run recorder** logs every tool call, token cost, result, and the parsed status. Every run is recorded — including agent-side failures: if the runner throws post-staging (e.g. missing API key, placeholder token at spawn), the failure is recorded as an `error` run (with the error message) rather than thrown away. Only setup problems that occur before there is a prompt to record (missing rule, undefined MCP server) propagate as exceptions.
 7. **Stop check:** if the parsed status is `done` or `error`, the app sets `enabled = false` and records the reason. Also checked: `maxRuns` and `expiresAt` backstops.
 8. MCP servers torn down, workdir optionally archived.
 

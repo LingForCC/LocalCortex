@@ -20,7 +20,7 @@ Covers **run recording** (the `runs` table + repository), the **run-loop → rec
 | Type | Tool | Where |
 | --- | --- | --- |
 | Unit | Vitest | `src/**/*.test.ts` |
-| E2E | Playwright (Run history view) | planned |
+| E2E | Playwright (Run history view) | `playwright/observability.spec.ts` (partial) |
 | Manual | operator | — |
 
 ---
@@ -56,15 +56,16 @@ Covers **run recording** (the `runs` table + repository), the **run-loop → rec
 | O-P11–P14 | empty input, empty reason, extra fields, whitespace | ✅ existing |
 
 ### Run-loop → record — `src/main/agent/run-loop.test.ts`
-**Status:** ✅ covered (6 cases, stub runner + in-memory DB).
+**Status:** ✅ covered (7 cases, stub runner + in-memory DB).
 
 | # | Case | Expected |
 | --- | --- | --- |
 | O-L1 | successful run records prompt + parsed status | ✅ existing |
 | O-L2 | event payload stored on the run | ✅ existing (event render case) |
 | O-L3 | `error`/`done` parsed status reflected on the run | ✅ existing |
+| O-L4 | runner failure (post-staging) recorded as an `error` run instead of thrown; `durationMs` recorded and non-negative | ✅ existing |
 
-> **Add:** a case asserting `durationMs` is recorded and non-negative.
+> The `durationMs`-is-recorded case is now covered by O-L4 (the error-run case asserts `run.durationMs >= 0`).
 
 ---
 
@@ -84,11 +85,13 @@ Covers **run recording** (the `runs` table + repository), the **run-loop → rec
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| O-E1 | A run appears after Run-now | Run a rule; open Run history | row present |
-| O-E2 | Detail panel shows prompt/result/toolCalls | Click a run row | three sections populated |
-| O-E3 | Status badge matches parsed status | run signaling `done` | green "done" badge |
-| O-E4 | Error run shows error message | run without credentials | red status, error text in Result |
-| O-E5 | File log has a one-line summary per run | tail `~/Library/Logs/LocalCortex/main.log` | summary line per run |
+| O-E1 | A run appears after Run-now | Run a rule; open Run history | row present ✅ existing (`playwright/observability.spec.ts`) |
+| O-E2 | Detail panel shows prompt/result/toolCalls | Click a run row | three sections populated — **manual** (real `toolCalls` need live credentials) |
+| O-E3 | Status badge matches parsed status | run signaling `done` | green "done" badge — **manual** (needs a successful run) |
+| O-E4 | Error run shows error message | run without credentials | red status, error text in Result ✅ existing (`playwright/observability.spec.ts`) |
+| O-E5 | Run durably recorded (re-fetchable via IPC) | trigger a run, then `window.api.runs.list` | the `error` run persists ✅ existing (`playwright/observability.spec.ts`) |
+
+> O-E5's original intent (a one-line summary in `~/Library/Logs/LocalCortex/main.log`) can't be isolated in E2E: electron-log resolves that path through macOS Cocoa and ignores both `HOME` and `--user-data-dir`. The DB-backed run record — the isolatable, authoritative surface — is asserted instead. The file-log line itself remains a manual check.
 
 ---
 

@@ -10,6 +10,7 @@ export default tseslint.config(
     ignores: [
       'node_modules/',
       '.vite/',
+      '**/.vite/',
       'out/',
       'dist/',
       '.release/',
@@ -73,6 +74,24 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  // Playwright E2E specs (Node globals; relax strict type-checked rules where
+  // the test ergonomics call for it — e.g. the empty fixture-deps pattern and
+  // casting through `unknown` to reach the renderer's window.api bridge).
+  {
+    files: ['playwright/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
