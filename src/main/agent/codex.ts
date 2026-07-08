@@ -75,7 +75,12 @@ export class CodexAgentRunner implements AgentRunner {
     }
 
     try {
-      const userInput: Input = { type: 'message', content: input.prompt } as unknown as Input;
+      // SDK `Input = string | UserInput[]`. A bare string is the simplest valid
+      // form; the prior `{ type: 'message', content }` object matched no union
+      // member (valid variants are `text`/`local_image`) and was force-cast past
+      // the type checker, which the SDK then tried to iterate → "input is not
+      // iterable".
+      const userInput: Input = input.prompt;
       const turn = await thread.run(userInput, input.signal ? { signal: input.signal } : undefined);
 
       const text = turn.finalResponse ?? '';
