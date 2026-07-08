@@ -10,7 +10,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AppSettingsSchema } from '@shared/schemas/settings-schema';
 import type { AppSettings } from '@shared/types';
-import { DEFAULT_TICK_INTERVAL_SECONDS, DEFAULT_CONCURRENCY } from '@shared/constants';
+import {
+  DEFAULT_TICK_INTERVAL_SECONDS,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_APPEARANCE,
+} from '@shared/constants';
 
 const SETTINGS_KEY = 'app';
 
@@ -26,6 +30,7 @@ export class SettingsRepository {
     return AppSettingsSchema.parse({
       tickIntervalSeconds: stored['tickIntervalSeconds'] ?? DEFAULT_TICK_INTERVAL_SECONDS,
       concurrency: stored['concurrency'] ?? DEFAULT_CONCURRENCY,
+      appearance: typeof stored['appearance'] === 'string' ? stored['appearance'] : DEFAULT_APPEARANCE,
       ...(typeof stored['ingressSecret'] === 'string'
         ? { ingressSecret: stored['ingressSecret'] }
         : {}),

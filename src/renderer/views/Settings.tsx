@@ -1,6 +1,6 @@
 /**
- * Settings view — global tick interval, concurrency cap, ingress secret, and
- * explicit CLI paths for the Codex / Claude Code backends.
+ * Settings view — global tick interval, concurrency cap, appearance, ingress
+ * secret, and explicit CLI paths for the Codex / Claude Code backends.
  *
  * Spec: docs/architecture.md §6.4, §6.5, §6.5.1. The global default tick
  * interval applies when a rule omits its own; the concurrency cap bounds
@@ -13,8 +13,11 @@ import * as React from 'react';
 import { Button } from '@renderer/components/ui/button';
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
+import { Select } from '@renderer/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useSettingsStore } from '@renderer/store/settings';
+import { APPEARANCES } from '@shared/constants';
+import type { AppSettings } from '@shared/types';
 
 export function Settings() {
   const settings = useSettingsStore((s) => s.settings);
@@ -23,6 +26,7 @@ export function Settings() {
 
   const [tick, setTick] = React.useState(String(settings.tickIntervalSeconds));
   const [concurrency, setConcurrency] = React.useState(String(settings.concurrency));
+  const [appearance, setAppearance] = React.useState<AppSettings['appearance']>(settings.appearance);
   const [codexCliPath, setCodexCliPath] = React.useState(settings.codexCliPath ?? '');
   const [claudeCliPath, setClaudeCliPath] = React.useState(settings.claudeCliPath ?? '');
   const [error, setError] = React.useState<string | undefined>();
@@ -37,6 +41,7 @@ export function Settings() {
   React.useEffect(() => {
     setTick(String(settings.tickIntervalSeconds));
     setConcurrency(String(settings.concurrency));
+    setAppearance(settings.appearance);
     setCodexCliPath(settings.codexCliPath ?? '');
     setClaudeCliPath(settings.claudeCliPath ?? '');
   }, [settings]);
@@ -47,6 +52,7 @@ export function Settings() {
     const err = await update({
       tickIntervalSeconds: Number(tick),
       concurrency: Number(concurrency),
+      appearance,
       codexCliPath,
       claudeCliPath,
     });
@@ -86,6 +92,24 @@ export function Settings() {
           />
           <p className="text-xs text-muted-foreground">
             Max concurrent agent runs across the scheduler and event ingress.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="appearance">Appearance</Label>
+          <Select
+            id="appearance"
+            value={appearance}
+            onChange={(e) => setAppearance(e.target.value as AppSettings['appearance'])}
+          >
+            {APPEARANCES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            <code>System</code> follows your OS color scheme. Applies immediately on save.
           </p>
         </div>
 

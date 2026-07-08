@@ -10,7 +10,7 @@
  * On `before-quit`, signals in-flight runs to abort and tears down subprocesses.
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { openDatabase } from './db/client.js';
@@ -31,6 +31,7 @@ import { registerRulesIpc } from './ipc/rules.js';
 import { registerRunsIpc } from './ipc/runs.js';
 import { registerServersIpc } from './ipc/servers.js';
 import { registerSettingsIpc } from './ipc/settings.js';
+import { IPC } from '@shared/schemas/ipc-schema';
 import { LifecycleManager } from './mcp/lifecycle.js';
 import { logger, logError } from './observability/logger.js';
 import {
@@ -69,6 +70,29 @@ function omnifocusServerEntry(): string {
 }
 
 /**
+ * Push the effective dark-mode state (`nativeTheme.shouldUseDarkColors`) to the
+ * renderer, which toggles the `.dark` class the theme tokens key off of. We
+ * transmit the *effective* state rather than the raw setting so `system` mode
+ * resolves correctly (dark-or-light depends on the OS).
+ */
+function pushThemeToRenderer(): void {
+  const dark = nativeTheme.shouldUseDarkColors;
+  mainWindow?.webContents.send(IPC.THEME_APPLY, dark);
+}
+
+/**
+ * Apply the persisted appearance setting to Electron's `nativeTheme` and notify
+ * the renderer of the effective dark-mode state. Call once on bootstrap and
+ * again whenever Settings changes. `system` follows the OS preference; the
+ * `nativeTheme.on('updated')` listener (registered in bootstrap) covers OS
+ * changes while in `system` mode.
+ */
+function applyAppearance(appearance: AppSettings['appearance']): void {
+  nativeTheme.themeSource = appearance;
+  pushThemeToRenderer();
+}
+
+/**
  * Build a RunnerProvider that resolves each backend's CLI binary fresh per
  * call from the latest settings (arch §6.5.1). Reading settings on each run
  * (rather than once at bootstrap) means a Settings change to codexCliPath /
@@ -100,6 +124,10 @@ async function bootstrap(): Promise<void> {
   const runsRepo = new RunsRepository(db);
   const settingsRepo = new SettingsRepository(db);
   const settings = settingsRepo.get();
+
+  // Apply the persisted color scheme before the window mounts so there's no
+  // flash of the wrong theme.
+  applyAppearance(settings.appearance);
 
   // 2. MCP config file (write bundled default on first launch).
   const appDataRoot = join(homedir(), APP_DATA_DIRNAME);
@@ -177,7 +205,13 @@ async function bootstrap(): Promise<void> {
     ),
   );
   registerServersIpc({ configPath, getRules: () => rulesRepo.list() });
-  registerSettingsIpc(settingsRepo);
+  // Re-apply the theme (and any future side-effecting setting) on change so a
+  // Settings edit takes effect immediately, with no restart.
+  registerSettingsIpc(settingsRepo, (updated) => applyAppearance(updated.appearance));
+
+  // In `system` mode the effective scheme can flip under us when the OS theme
+  // changes; re-push the effective state so the renderer follows it.
+  nativeTheme.on('updated', pushThemeToRenderer);
 
   // Re-schedule on rule changes.
   ipcMain.on('rules:changed', () => {
@@ -203,6 +237,11 @@ async function createWindow(): Promise<void> {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+
+  // Once the renderer has loaded, its preload `theme.onApply` listener is
+  // registered; push the current effective scheme so the first paint matches
+  // the persisted Appearance setting (no flash of the wrong theme).
+  mainWindow.webContents.on('did-finish-load', pushThemeToRenderer);
 
   // Surface renderer load failures (otherwise they manifest as a blank window).
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {

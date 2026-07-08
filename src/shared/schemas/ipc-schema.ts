@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
+import { APPEARANCES } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
 
@@ -32,6 +33,8 @@ export const IPC = {
 
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
+
+  THEME_APPLY: 'theme:apply',
 } as const;
 
 // --- Rules ------------------------------------------------------------------
@@ -69,6 +72,8 @@ export const TriggerRunMessageSchema = z.object({
 export const UpdateSettingsMessageSchema = z.object({
   tickIntervalSeconds: z.number().int().positive().min(300).optional(),
   concurrency: z.number().int().positive().optional(),
+  /** Color scheme. `system` follows the OS preference. */
+  appearance: z.enum(APPEARANCES).optional(),
   ingressSecret: z.string().nullable().optional(),
   /** Explicit path to a local `codex` CLI. null clears it (auto-detect/default). */
   codexCliPath: z.string().nullable().optional(),

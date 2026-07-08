@@ -5,9 +5,9 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 ---
 
 ## In scope
-- `SettingsRepository.get` (defaults on empty table) + `.update` (partial merge).
+- `SettingsRepository.get` (defaults on empty table, incl. appearance) + `.update` (partial merge).
 - `ConcurrencyQueue` (cap enforcement, FIFO, error isolation, drain).
-- `settings:get/update` IPC (incl. `ingressSecret: null` → clear; CLI path validation).
+- `settings:get/update` IPC (incl. `ingressSecret: null` → clear; CLI path validation; appearance → `nativeTheme`).
 - `cli-resolver.ts` (explicit → PATH → undefined fallback, `isExecutablePath`).
 
 ## Out of scope
@@ -38,6 +38,7 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-R4 | ingress secret persists | ✅ existing |
 | SE-R5 | codex/claude CLI paths persist | ✅ existing |
 | SE-R6 | clearing CLI paths (`''`) doesn't resurrect old values | ✅ existing |
+| SE-R7 | appearance defaults to `system`; explicit `dark`/`light` round-trips | ✅ existing |
 
 ### cli-resolver — `src/main/agent/cli-resolver.test.ts`
 **Status:** ✅ covered — 10 cases.
@@ -68,7 +69,7 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 ---
 
 ## IPC — `src/main/ipc/settings.ts`
-**Status:** not unit-tested (Electron-coupled). Notes: `ingressSecret: null` is normalized to `''` (clear) by the handler; the handler validates CLI paths on save (`existsSync` + `accessSync(X_OK)`) and returns `{ ok: false, error }` instead of throwing on a bad path.
+**Status:** not unit-tested (Electron-coupled). Notes: `ingressSecret: null` is normalized to `''` (clear) by the handler; the handler validates CLI paths on save (`existsSync` + `accessSync(X_OK)`) and returns `{ ok: false, error }` instead of throwing on a bad path; after a successful update it invokes an `onUpdate` hook so the bootstrap re-applies `nativeTheme.themeSource` from `appearance` and re-pushes the effective scheme to the renderer over `theme:apply` (covered in E2E SE-E4).
 
 | # | Case | Expected |
 | --- | --- | --- |
@@ -81,17 +82,20 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-I7 | `settings:update { claudeCliPath: '/bad' }` (non-existent) | `{ ok: false, error }` |
 | SE-I8 | `settings:update { codexCliPath: '' }` clears it | `{ ok: true }`, path unset |
 | SE-I9 | `settings:update { codexCliPath: null }` clears it | `{ ok: true }`, path unset |
+| SE-I10 | `settings:update { appearance: 'dark' }` persists + re-applies `nativeTheme` + emits `theme:apply` | `{ ok: true }`, themeSource=dark, renderer `.dark` |
 
 ---
 
 ## E2E (Playwright)
 
-**Status:** ✅ covered — `playwright/settings.spec.ts` (2 cases), on the shared isolation fixture.
+**Status:** ✅ covered — `playwright/settings.spec.ts` (4 cases), on the shared isolation fixture.
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | SE-E1 | Settings persist across reload | change tick interval + concurrency → Save → relaunch | both values restored ✅ existing (automates the former SE-M4) |
 | SE-E2 | Invalid tick (< 300) rejected | set tick to 100 → Save → relaunch | schema rejects; default still in place ✅ existing (E2E equivalent of SE-I5) |
+| SE-E3 | Appearance persists across reload | change Appearance to `dark` → Save → relaunch | `dark` restored ✅ existing |
+| SE-E4 | Appearance applies immediately | change Appearance to `dark` → Save | `nativeTheme.themeSource === 'dark'` + renderer `.dark` class / dark `body` bg; flip to `light` reverses it ✅ existing |
 
 ---
 
@@ -105,6 +109,7 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-M4 | Settings persist across restart | set values, quit, relaunch | values restored |
 | SE-M5 | CLI path applies without restart | set `codexCliPath` to a local binary; trigger a run | next run spawns the local binary (verify via logs) |
 | SE-M6 | Bad CLI path rejected on save | enter a non-existent path → Save | inline error; value not persisted |
+| SE-M7 | `System` follows the OS | set Appearance to `System`; toggle OS dark mode | window follows the OS scheme without a restart |
 
 ---
 

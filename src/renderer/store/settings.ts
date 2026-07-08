@@ -4,7 +4,11 @@
 
 import { create } from 'zustand';
 import type { AppSettings } from '@shared/types';
-import { DEFAULT_TICK_INTERVAL_SECONDS, DEFAULT_CONCURRENCY } from '@shared/constants';
+import {
+  DEFAULT_TICK_INTERVAL_SECONDS,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_APPEARANCE,
+} from '@shared/constants';
 
 interface SettingsState {
   settings: AppSettings;
@@ -23,6 +27,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   settings: {
     tickIntervalSeconds: DEFAULT_TICK_INTERVAL_SECONDS,
     concurrency: DEFAULT_CONCURRENCY,
+    appearance: DEFAULT_APPEARANCE,
   },
   serverNames: [],
   placeholders: [],

@@ -27,6 +27,9 @@ Thumbs.db
 *.swo
 *~
 
+# ZCode (local agent tooling: plans, config, hooks)
+.zcode/
+
 # TypeScript
 *.tsbuildinfo
 

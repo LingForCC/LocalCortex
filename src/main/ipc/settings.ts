@@ -16,7 +16,17 @@ export type UpdateSettingsResult =
   | { ok: true; settings: AppSettings }
   | { ok: false; error: string };
 
-export function registerSettingsIpc(settingsRepo: SettingsRepository): void {
+/**
+ * Optional hook invoked after a *successful* `settings:update`. The main
+ * bootstrap uses it to re-apply `nativeTheme.themeSource` (and any other
+ * side-effecting setting) so a Settings change takes effect immediately.
+ */
+type OnSettingsUpdated = (settings: AppSettings) => void;
+
+export function registerSettingsIpc(
+  settingsRepo: SettingsRepository,
+  onUpdate?: OnSettingsUpdated,
+): void {
   ipcMain.handle(IPC.SETTINGS_GET, async () => settingsRepo.get());
 
   ipcMain.handle(IPC.SETTINGS_UPDATE, async (_evt, raw): Promise<UpdateSettingsResult> => {
@@ -48,6 +58,7 @@ export function registerSettingsIpc(settingsRepo: SettingsRepository): void {
     if (parsed.tickIntervalSeconds !== undefined)
       patch.tickIntervalSeconds = parsed.tickIntervalSeconds;
     if (parsed.concurrency !== undefined) patch.concurrency = parsed.concurrency;
+    if (parsed.appearance !== undefined) patch.appearance = parsed.appearance;
     if (parsed.ingressSecret !== undefined) {
       patch.ingressSecret = parsed.ingressSecret ?? '';
     }
@@ -58,6 +69,8 @@ export function registerSettingsIpc(settingsRepo: SettingsRepository): void {
       patch.claudeCliPath = parsed.claudeCliPath ?? '';
     }
     const settings = settingsRepo.update(patch);
+    // Re-apply side-effecting settings (e.g. nativeTheme) on change.
+    onUpdate?.(settings);
     return { ok: true, settings };
   });
 }

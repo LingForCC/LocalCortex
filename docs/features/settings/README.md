@@ -1,6 +1,6 @@
 # Settings
 
-Global defaults that apply across all rules. The **Settings** tab exposes five knobs: the default tick interval, the concurrency cap, an optional event-ingress shared secret, and optional explicit paths to the Codex / Claude Code CLIs.
+Global defaults that apply across all rules. The **Settings** tab exposes six knobs: the default tick interval, the concurrency cap, the appearance (light/dark/system), an optional event-ingress shared secret, and optional explicit paths to the Codex / Claude Code CLIs.
 
 > Design: [architecture §6.4 (concurrency)](../../architecture.md#64-concurrency--capped-parallelism), [§6.5 (cadence)](../../architecture.md#65-cadence--global-default--per-rule-override), [§6.5.1 (CLI resolution)](../../architecture.md#651-cli-resolution--local-vs-bundled-binary), [§8 (ingress security)](../../architecture.md#8-known-constraints--risks).
 
@@ -12,6 +12,7 @@ Global defaults that apply across all rules. The **Settings** tab exposes five k
 | --- | --- | --- |
 | **Default tick interval** | `3600` s (60 min) | Applied to tick rules that omit their own `intervalSeconds`. Minimum `300`. |
 | **Concurrency cap** | `3` | Max agent runs executing at once, shared across the scheduler and the event ingress. |
+| **Appearance** | `system` | Color scheme: `system` follows the OS preference; `light` / `dark` force one. Applies immediately on save. |
 | **Ingress shared secret** | none (unset) | If set, every POST to the event ingress must carry `x-localcortex-secret: <value>` or get HTTP 401. |
 | **Codex CLI path** | none (auto-detect) | Explicit path to a locally installed `codex` binary. Leave blank to auto-detect on `PATH` (falls back to the SDK's bundled binary). |
 | **Claude Code CLI path** | none (auto-detect) | Explicit path to a locally installed `claude` binary. Same resolution semantics as the Codex field. |
@@ -38,6 +39,22 @@ The cap bounds:
 - **resource use** (subprocesses, MCP servers, memory).
 
 Excess runs are not dropped — they wait. Setting it to `1` serializes all runs; the default `3` allows modest parallelism without overload.
+
+## Appearance
+
+The color scheme for the LocalCortex window. Three modes:
+
+| Mode | Behavior |
+| --- | --- |
+| **System** *(default)* | Follows the OS color scheme. If your OS is in dark mode, LocalCortex is too; switch the OS and the app follows on its next paint. |
+| **Light** | Forces a light window regardless of the OS setting. |
+| **Dark** | Forces a dark window regardless of the OS setting. |
+
+How it works: the main process sets Electron's `nativeTheme.themeSource` from this value and notifies the renderer of the *effective* scheme (`nativeTheme.shouldUseDarkColors`, which resolves `system` against the OS) over a `theme:apply` IPC channel. The renderer toggles a `.dark` class on `<html>`, and the theme tokens in `src/renderer/styles.css` (light defaults on `:root` + dark overrides under `.dark`) drive every shadcn primitive and the `body` background — so the whole UI flips with no per-component work.
+
+> We use an explicit `.dark` class driven by `nativeTheme.shouldUseDarkColors` rather than the CSS `prefers-color-scheme` media query because Chromium's propagation of that query from `nativeTheme` is unreliable in the Electron runtime; `shouldUseDarkColors` is the authoritative signal.
+
+The choice applies **immediately on save** (no restart): the `settings:update` handler re-applies `nativeTheme.themeSource` as soon as the value is persisted, and `system` mode also follows live OS theme changes via a `nativeTheme.on('updated')` listener. It persists across restarts like every other setting.
 
 ## Ingress shared secret
 
@@ -69,11 +86,12 @@ Behavior notes:
 
 1. Open the **Settings** tab.
 2. Edit **Default tick interval** and/or **Concurrency cap**.
-3. (Optional) set an **Ingress shared secret** — leave blank to disable auth.
-4. (Optional) set **Codex CLI path** / **Claude Code CLI path** — leave blank to auto-detect on `PATH`.
-5. Click **Save**.
+3. (Optional) choose an **Appearance** — `System` follows your OS.
+4. (Optional) set an **Ingress shared secret** — leave blank to disable auth.
+5. (Optional) set **Codex CLI path** / **Claude Code CLI path** — leave blank to auto-detect on `PATH`.
+6. Click **Save**.
 
-Changes apply immediately: the concurrency cap takes effect for the next enqueued run; the tick default reschedules dependent rules on save; the secret gate applies to the next inbound event; a CLI path change applies to the next run.
+Changes apply immediately: the concurrency cap takes effect for the next enqueued run; the tick default reschedules dependent rules on save; the secret gate applies to the next inbound event; a CLI path change applies to the next run; the appearance takes effect on the next paint.
 
 ---
 

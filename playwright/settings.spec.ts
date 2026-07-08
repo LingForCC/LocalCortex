@@ -58,3 +58,61 @@ test.describe('Global settings', () => {
     );
   });
 });
+
+test.describe('Appearance', () => {
+  test('changing appearance persists across reload', async ({ app }) => {
+    await gotoTab(app.window, 'Settings');
+
+    const appearance = app.window.getByLabel('Appearance');
+    // Sanity: the default is 'system'.
+    await expect(appearance).toHaveValue('system');
+
+    await appearance.selectOption('dark');
+    await app.window.getByRole('button', { name: 'Save' }).click();
+
+    // Relaunch and confirm the choice was restored from the DB.
+    await app.relaunch();
+    await gotoTab(app.window, 'Settings');
+    await expect(app.window.getByLabel('Appearance')).toHaveValue('dark');
+  });
+
+  test('selecting dark applies the dark color scheme immediately', async ({ app }) => {
+    await gotoTab(app.window, 'Settings');
+
+    const appearance = app.window.getByLabel('Appearance');
+    await appearance.selectOption('dark');
+    await app.window.getByRole('button', { name: 'Save' }).click();
+
+    // The main process should drive nativeTheme to 'dark' and Chromium should
+    // render the dark background token (hsl(222.2 47.4% 11.2%) = rgb(15,23,42))
+    // from the prefers-color-scheme: dark block in styles.css. Both propagation
+    // and the CSS recompute are async, so poll until they agree.
+    await expect
+      .poll(async () => {
+        const themeSource = await app.electronApp.evaluate(
+          ({ nativeTheme }) => nativeTheme.themeSource,
+        );
+        const bg = await app.window.evaluate(
+          () => getComputedStyle(document.body).backgroundColor,
+        );
+        return { themeSource, bg };
+      })
+      .toEqual({ themeSource: 'dark', bg: 'rgb(15, 23, 42)' });
+
+    // Switch back to light and confirm the window flips too (no restart):
+    // light background token is hsl(0 0% 100%) = rgb(255, 255, 255).
+    await appearance.selectOption('light');
+    await app.window.getByRole('button', { name: 'Save' }).click();
+    await expect
+      .poll(async () => {
+        const themeSource = await app.electronApp.evaluate(
+          ({ nativeTheme }) => nativeTheme.themeSource,
+        );
+        const bg = await app.window.evaluate(
+          () => getComputedStyle(document.body).backgroundColor,
+        );
+        return { themeSource, bg };
+      })
+      .toEqual({ themeSource: 'light', bg: 'rgb(255, 255, 255)' });
+  });
+});

@@ -21,6 +21,20 @@ const TABS: { id: Tab; label: string }[] = [
 export function App() {
   const [tab, setTab] = React.useState<Tab>('rules');
 
+  // Apply the effective dark-mode state from Electron's nativeTheme. The main
+  // process emits on THEME_APPLY whenever shouldUseDarkColors changes (driven
+  // by Settings → Appearance); toggle the `.dark` class that styles.css keys
+  // the dark token overrides off of. We use the explicit class rather than the
+  // prefers-color-scheme media query because Chromium's propagation of that
+  // query from nativeTheme is unreliable in this Electron runtime.
+  React.useEffect(() => {
+    const apply = (dark: boolean): void => {
+      document.documentElement.classList.toggle('dark', dark);
+    };
+    const off = window.api.theme.onApply(apply);
+    return off;
+  }, []);
+
   return (
     <div className="flex h-screen">
       <aside className="w-52 shrink-0 border-r bg-muted/40 p-3">

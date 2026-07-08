@@ -212,6 +212,16 @@ describe('SettingsRepository', () => {
     const s = new SettingsRepository(db).get();
     expect(s.tickIntervalSeconds).toBe(DEFAULT_TICK_INTERVAL_SECONDS);
     expect(s.concurrency).toBe(DEFAULT_CONCURRENCY);
+    expect(s.appearance).toBe('system');
+  });
+
+  it('persists and round-trips the appearance setting', () => {
+    const repo = new SettingsRepository(db);
+    repo.update({ appearance: 'dark' });
+    expect(repo.get().appearance).toBe('dark');
+    // A null/unknown stored value falls back to the default.
+    repo.update({ appearance: 'light' });
+    expect(repo.get().appearance).toBe('light');
   });
 
   it('persists and merges partial updates', () => {

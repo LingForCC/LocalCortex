@@ -44,6 +44,19 @@ const api = {
     update: (patch: Partial<AppSettings>): Promise<UpdateSettingsResult> =>
       ipcRenderer.invoke(IPC.SETTINGS_UPDATE, patch),
   },
+  theme: {
+    /**
+     * Subscribe to the effective dark-mode state driven by `nativeTheme`
+     * (which Settings → Appearance controls). The main process emits whenever
+     * `nativeTheme.shouldUseDarkColors` changes; the renderer toggles the
+     * `.dark` class on <html>. Returns an unsubscribe function.
+     */
+    onApply: (handler: (dark: boolean) => void): (() => void) => {
+      const listener = (_evt: unknown, dark: boolean): void => handler(dark);
+      ipcRenderer.on(IPC.THEME_APPLY, listener);
+      return () => ipcRenderer.off(IPC.THEME_APPLY, listener);
+    },
+  },
 };
 
 export type LocalCortexApi = typeof api;

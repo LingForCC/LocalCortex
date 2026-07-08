@@ -12,6 +12,11 @@ export const DEFAULT_TICK_INTERVAL_SECONDS = 3600;
 /** Default concurrency cap for the agent-run queue (arch §6.4). */
 export const DEFAULT_CONCURRENCY = 3;
 
+/** Valid appearance modes. `system` follows the OS `prefers-color-scheme`. */
+export const APPEARANCES = ['system', 'light', 'dark'] as const;
+/** Default appearance — follow the OS preference out of the box. */
+export const DEFAULT_APPEARANCE = 'system';
+
 /** Default `maxRuns` backstop when a rule omits it (rule-config-schema §7: ≈2 days @ 60min). */
 export const DEFAULT_MAX_RUNS = 48;
 
