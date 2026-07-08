@@ -123,7 +123,7 @@ rule:  A Codex coding session just completed in {{workdir}} with summary:
        is required from me, and create an OmniFocus task under 'Code Review'
        describing it. If no action is needed, do nothing.
 trigger: event, eventType codex.session-complete
-mcpServers: omnifocus
+mcpServers: todoist
 backend: claude
 maxRuns: null   // react to every matching session, indefinitely
 ```

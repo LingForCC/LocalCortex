@@ -179,7 +179,7 @@ describe('matchEventsToRules', () => {
 
 ### What doesn't get automated
 - Real agent reasoning quality (inherently non-deterministic; spot-check manually).
-- Real OmniFocus/Todoist writes (need real accounts; test against a throwaway Todoist project, and mock OmniFocus JXA in CI).
+- Real OmniFocus/Todoist writes (need real accounts; test against a throwaway Todoist project).
 
 ---
 

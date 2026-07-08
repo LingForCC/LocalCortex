@@ -9,7 +9,8 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/schemas/ipc-schema';
-import type { Rule, Run, AppSettings, RuleWithBookkeeping } from '@shared/types';
+import type { Rule, Run, AppSettings, RuleWithBookkeeping, Handoff } from '@shared/types';
+import type { CreateHandoff } from '@shared/schemas/handoff-schema';
 import type { UpdateSettingsResult } from './ipc/settings.js';
 
 const api = {
@@ -31,6 +32,13 @@ const api = {
     get: (id: number): Promise<Run | null> => ipcRenderer.invoke(IPC.RUN_GET, { id }),
     trigger: (ruleId: string, eventPayload?: Record<string, unknown>): Promise<{ runId: number }> =>
       ipcRenderer.invoke(IPC.RUN_TRIGGER, { ruleId, eventPayload }),
+  },
+  handoffs: {
+    list: (): Promise<Handoff[]> => ipcRenderer.invoke(IPC.HANDOFF_LIST),
+    get: (id: string): Promise<Handoff | null> => ipcRenderer.invoke(IPC.HANDOFF_GET, { id }),
+    create: (input: CreateHandoff): Promise<Handoff | null> =>
+      ipcRenderer.invoke(IPC.HANDOFF_CREATE, input),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.HANDOFF_DELETE, { id }),
   },
   servers: {
     list: (): Promise<{ names: string[]; placeholders: string[] }> =>

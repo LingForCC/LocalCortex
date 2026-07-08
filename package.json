@@ -16,7 +16,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "build:omnifocus": "npm --prefix sinks/omnifocus-jxa run build",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },

@@ -14,6 +14,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import initialSql from './migrations/001_initial.sql?raw';
+import handoffsSql from './migrations/002_handoffs.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -26,7 +27,10 @@ interface Migration {
  * (import the `.sql?raw` and append), which keeps the set explicit and
  * reviewable rather than discovered from disk.
  */
-const MIGRATIONS: Migration[] = [{ version: 1, sql: initialSql }];
+const MIGRATIONS: Migration[] = [
+  { version: 1, sql: initialSql },
+  { version: 2, sql: handoffsSql },
+];
 
 /** Result of running migrations. */
 export interface MigrationResult {

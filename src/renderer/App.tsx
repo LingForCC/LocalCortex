@@ -6,14 +6,16 @@ import * as React from 'react';
 import { Button } from '@renderer/components/ui/button';
 import { RuleList } from './views/RuleList';
 import { RunHistory } from './views/RunHistory';
+import { Handoffs } from './views/Handoffs';
 import { Sources } from './views/Sources';
 import { Settings } from './views/Settings';
 
-type Tab = 'rules' | 'runs' | 'sources' | 'settings';
+type Tab = 'rules' | 'runs' | 'handoffs' | 'sources' | 'settings';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'rules', label: 'Rules' },
   { id: 'runs', label: 'Run history' },
+  { id: 'handoffs', label: 'Handoffs' },
   { id: 'sources', label: 'Sources' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -56,6 +58,7 @@ export function App() {
       <main className="flex-1 overflow-auto p-6">
         {tab === 'rules' && <RuleList />}
         {tab === 'runs' && <RunHistory />}
+        {tab === 'handoffs' && <Handoffs />}
         {tab === 'sources' && <Sources />}
         {tab === 'settings' && <Settings />}
       </main>

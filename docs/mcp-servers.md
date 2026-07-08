@@ -17,7 +17,7 @@ This is the same model Claude Desktop and other MCP clients use. Users add or mo
 
 There is no in-code server registry and no separate credential store. The file is the single source of truth: it *is* the registry, and it *holds* the credentials.
 
-A bundled **default config** (§3) is written to the path on first launch so the four v1 servers work out of the box; the user then edits it to put in real tokens or add servers.
+A bundled **default config** (§3) is written to the path on first launch so the three v1 servers work out of the box; the user then edits it to put in real tokens or add servers.
 
 ---
 
@@ -59,12 +59,6 @@ A bundled **default config** (§3) is written to the path on first launch so the
       "env": {
         "TODOIST_API_TOKEN": "tod_abc123..."
       }
-    },
-    "omnifocus": {
-      "transport": "stdio",
-      "command": "node",
-      "args": ["<app-bundle>/sinks/omnifocus-jxa/dist/index.js"],
-      "env": {}
     }
   }
 }
@@ -85,13 +79,12 @@ A bundled **default config** (§3) is written to the path on first launch so the
 - **Names are arbitrary.** Unlike a fixed union type, `McpServerName` is just `string`. A user can define two GitHub entries (`github-personal`, `github-work`) pointing at different tokens, or alias a server under a friendly name.
 - **Multiple env vars are fine.** The GitLab entry above sets both a token and a custom API URL — useful for self-hosted GitLab.
 - **Credentials are plaintext.** Tokens are written directly into the `env` object. This is a deliberate trade-off for simplicity and self-containment — see §6.
-- **The OmniFocus entry points into the app bundle.** Its `command`/`args` are written by the app on first launch (the path depends on the install location), and the user generally doesn't edit it. It has an empty `env` because the JXA wrapper talks to the local OmniFocus app, not an API.
 
 ---
 
 ## 3. Default config (shipped)
 
-On first launch, if `~/.localcortex/mcp-servers.json` does not exist, the app writes a default containing the four v1 servers with **empty token placeholders**:
+On first launch, if `~/.localcortex/mcp-servers.json` does not exist, the app writes a default containing the three v1 servers with **empty token placeholders**:
 
 ```jsonc
 {
@@ -116,12 +109,6 @@ On first launch, if `~/.localcortex/mcp-servers.json` does not exist, the app wr
       "command": "npx",
       "args": ["-y", "@abhiz123/todoist-mcp-server"],
       "env": { "TODOIST_API_TOKEN": "<your-token-here>" }
-    },
-    "omnifocus": {
-      "transport": "stdio",
-      "command": "node",
-      "args": ["<resolved-at-first-launch>"],
-      "env": {}
     }
   }
 }

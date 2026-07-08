@@ -19,7 +19,7 @@ All decisions referenced here are recorded in [architecture.md](./architecture.m
   "rule": "<natural-language instruction>",         // §2
   "trigger": { ... },                              // §3 — how the rule fires
 
-  "mcpServers": ["omnifocus"],                     // §4 — which servers to attach
+  "mcpServers": ["todoist"],                       // §4 — which servers to attach
 
   "backend": "claude",                             // §5 — claude | codex
   "workdir": "/Users/colin/code/my-repo",          // §6 — agent working directory
@@ -136,7 +136,7 @@ This is the *only* structural selector in the rule, and it exists for a specific
 
 Each name must exist as a key in `mcp-servers.json`. The same name can be used by multiple rules; users can also define multiple entries for the same upstream (e.g., `"github-personal"` and `"github-work"` pointing at different tokens) and pick per rule.
 
-The default config file ships with four entries — `github`, `gitlab`, `todoist`, `omnifocus` — but users can add or rename freely. See [mcp-servers.md](./mcp-servers.md) for the file format, the default config, and the resolution algorithm.
+The default config file ships with three entries — `github`, `gitlab`, `todoist` — but users can add or rename freely. See [mcp-servers.md](./mcp-servers.md) for the file format, the default config, and the resolution algorithm.
 
 All servers are external stdio servers, spawned per run — see [architecture.md §5.2, §5.4](./architecture.md#52-write-hosting--external-stdio-servers-uniformly).
 
@@ -268,7 +268,7 @@ A rule disabled by any mechanism can be re-enabled manually in the UI. Re-enabli
     "filter": { "workdir": "/Users/colin/code/*" }
   },
 
-  "mcpServers": ["omnifocus"],
+  "mcpServers": ["todoist"],
 
   "backend": "claude",
   "workdir": "/Users/colin/code/web-app",

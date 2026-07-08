@@ -51,12 +51,6 @@ There is no in-code registry and no separate credential store. The file is the s
       "command": "npx",
       "args": ["-y", "@abhiz123/todoist-mcp-server"],
       "env": { "TODOIST_API_TOKEN": "tod_abc123..." }
-    },
-    "omnifocus": {                                      // bundled JXA wrapper
-      "transport": "stdio",
-      "command": "node",
-      "args": ["<app-bundle>/sinks/omnifocus-jxa/dist/index.js"],
-      "env": {}
     }
   }
 }
@@ -71,7 +65,7 @@ There is no in-code registry and no separate credential store. The file is the s
 | `env` | Env vars on the spawned process. **Holds credentials as plaintext.** |
 
 ### First launch
-If the file doesn't exist, the app writes a **default** containing the four v1 servers (`github`, `gitlab`, `todoist`, `omnifocus`) with `<your-token-here>` placeholders. The file is created with **`0600`** permissions (owner read/write only).
+If the file doesn't exist, the app writes a **default** containing the three v1 servers (`github`, `gitlab`, `todoist`) with `<your-token-here>` placeholders. The file is created with **`0600`** permissions (owner read/write only).
 
 ---
 

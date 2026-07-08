@@ -17,7 +17,6 @@ code.
 
 - **Node ≥ 22.14** is required (built-in `node:sqlite`). Run `nvm use v22.14.0`
   before any npm command.
-- **Build the OmniFocus sink once** before launching: `npm run build:omnifocus`.
 
 | Task | Command |
 | --- | --- |
@@ -35,7 +34,7 @@ failure. Keep edits passing both.
 
 ## Module layout & boundaries
 
-Three Electron layers under `src/`, plus a standalone sink:
+Three Electron layers under `src/`:
 
 - **`src/shared/`** — the single source of truth for Zod schemas + TS types and
   app constants. Both processes import from here. When a shape changes, update
@@ -46,10 +45,6 @@ Three Electron layers under `src/`, plus a standalone sink:
 - **`src/renderer/`** — sandboxed React 19 + Tailwind 4 + Zustand UI. Touches
   the main process **only** through `window.api` (the preload bridge). No
   `require`, no filesystem, no CLIs.
-- **`sinks/omnifocus-jxa/`** — a **standalone npm package** (separate
-  `package.json`/`node_modules`). It is excluded from the root `tsconfig.json`
-  and ESLint config; build it with `npm run build:omnifocus` and edit it on its
-  own terms.
 
 Boundary rules that matter:
 

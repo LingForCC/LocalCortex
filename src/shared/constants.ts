@@ -39,6 +39,14 @@ export const CODEX_SESSION_COMPLETE_EVENT = 'codex.session-complete';
 /** Event type for Claude Code session completion (arch §3.4). */
 export const CLAUDE_SESSION_COMPLETE_EVENT = 'claude.session-complete';
 
+/**
+ * Event type emitted by the shipped ZCode `Stop` hook bridge
+ * (src/main/events/zcode-hook.sh). Mirrors the Codex hook: when a ZCode agent
+ * session ends, the hook POSTs this event with `payload.sessionId` (read from
+ * the CLAUDE_SESSION_ID env var the ZCode hook system exposes).
+ */
+export const ZCODE_SESSION_COMPLETE_EVENT = 'zcode.session-complete';
+
 /** Status values the agent emits in the status-contract block (arch §6.6). */
 export const RULE_STATUSES = ['active', 'done', 'error'] as const;
 

@@ -50,17 +50,17 @@ export interface EnsureConfigResult {
 
 /**
  * Ensure a config file exists at `path`; if missing, write the bundled default
- * (with `omnifocusServerEntry` resolved for the OmniFocus server) using 0600
- * permissions. Returns the loaded config + whether it was just created.
+ * using 0600 permissions. Returns the loaded config + whether it was just
+ * created.
  *
  * Callers pass `path` explicitly so the function is testable without Electron's
  * `app.getPath`. The main process computes the real `~/.localcortex/...` path.
  */
-export function ensureConfigFile(path: string, omnifocusServerEntry: string): EnsureConfigResult {
+export function ensureConfigFile(path: string): EnsureConfigResult {
   const existing = loadMcpServersFile(path);
   if (existing) return { config: existing, created: false, path };
 
-  const config = buildDefaultConfig(omnifocusServerEntry);
+  const config = buildDefaultConfig();
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path, serializeConfigFile(config), { encoding: 'utf8', mode: 0o600 });

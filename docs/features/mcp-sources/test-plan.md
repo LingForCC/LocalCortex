@@ -71,13 +71,12 @@ Covers the **config-file loader**, **name resolution**, **per-backend serializat
 | M-S10 | `assertNoPlaceholders` passes when all tokens real | ✅ existing |
 
 ### Default config — `src/main/mcp/default-config.ts`
-**Status:** partially covered (M-L8 asserts the four names + placeholder). **Add:**
+**Status:** partially covered (M-L8 asserts the three names + placeholder). **Add:**
 
 | # | Case | Expected |
 | --- | --- | --- |
-| M-D1 | default contains exactly `github`, `gitlab`, `todoist`, `omnifocus` | (covered via M-L8) |
-| M-D2 | `omnifocus.args` equals the resolved entry path passed in | **add** |
-| M-D3 | `gitlab.env.GITLAB_API_URL` defaults to `https://gitlab.com/api/v4` | **add** |
+| M-D1 | default contains exactly `github`, `gitlab`, `todoist` | (covered via M-L8) |
+| M-D2 | `gitlab.env.GITLAB_API_URL` defaults to `https://gitlab.com/api/v4` | **add** |
 
 ---
 

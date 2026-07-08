@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
+import { CreateHandoffSchema } from './handoff-schema.js';
 import { APPEARANCES } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
@@ -26,6 +27,11 @@ export const IPC = {
   RUN_LIST: 'runs:list',
   RUN_GET: 'runs:get',
   RUN_TRIGGER: 'runs:trigger',
+
+  HANDOFF_LIST: 'handoffs:list',
+  HANDOFF_GET: 'handoffs:get',
+  HANDOFF_CREATE: 'handoffs:create',
+  HANDOFF_DELETE: 'handoffs:delete',
 
   SERVERS_LIST: 'servers:list',
   SERVERS_READ: 'servers:read',
@@ -65,6 +71,13 @@ export const TriggerRunMessageSchema = z.object({
   /** Optional synthetic event payload for manually triggering an event rule. */
   eventPayload: z.record(z.string(), z.unknown()).optional(),
 });
+
+// --- Handoffs (pending reviews) --------------------------------------------
+
+export const HandoffIdSchema = z.object({ id: z.string().min(1) });
+
+/** `handoffs:create` payload. `CreateHandoffSchema` carries sessionId/context. */
+export const CreateHandoffMessageSchema = CreateHandoffSchema;
 
 // --- Settings ---------------------------------------------------------------
 

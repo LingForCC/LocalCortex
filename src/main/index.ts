@@ -17,18 +17,21 @@ import { openDatabase } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { RulesRepository } from './db/repositories/rules.js';
 import { RunsRepository } from './db/repositories/runs.js';
+import { HandoffsRepository } from './db/repositories/handoffs.js';
 import { SettingsRepository } from './db/repositories/settings.js';
 import { ensureConfigFile } from './mcp/config-loader.js';
 import { loadMcpServersFile } from './mcp/config-loader.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { ConcurrencyQueue } from './scheduler/concurrency.js';
 import { startIngress } from './events/ingress.js';
+import { prepareHandoffEnrichment } from './events/handoff-enrichment.js';
 import { executeRun, type RunnerProvider } from './agent/run-loop.js';
 import { ClaudeAgentRunner } from './agent/claude.js';
 import { CodexAgentRunner } from './agent/codex.js';
 import { resolveCodexPath, resolveClaudePath } from './agent/cli-resolver.js';
 import { registerRulesIpc } from './ipc/rules.js';
 import { registerRunsIpc } from './ipc/runs.js';
+import { registerHandoffsIpc } from './ipc/handoffs.js';
 import { registerServersIpc } from './ipc/servers.js';
 import { registerSettingsIpc } from './ipc/settings.js';
 import { IPC } from '@shared/schemas/ipc-schema';
@@ -60,14 +63,6 @@ let scheduler: Scheduler | null = null;
 let ingressServer: FastifyInstance | null = null;
 const lifecycle = new LifecycleManager();
 const inFlightAborts = new Set<AbortController>();
-
-// Path to the bundled OmniFocus MCP server entry, resolved from the app bundle.
-// In dev this is the repo's sinks/ build output; in production, inside the asar.
-function omnifocusServerEntry(): string {
-  // The main bundle is at .vite/build/main.js; the omnifocus server is built to
-  // sinks/omnifocus-jxa/dist/index.js (shipped unpacked). Use app.getAppPath().
-  return join(app.getAppPath(), 'sinks', 'omnifocus-jxa', 'dist', 'index.js');
-}
 
 /**
  * Push the effective dark-mode state (`nativeTheme.shouldUseDarkColors`) to the
@@ -122,6 +117,7 @@ async function bootstrap(): Promise<void> {
 
   const rulesRepo = new RulesRepository(db);
   const runsRepo = new RunsRepository(db);
+  const handoffsRepo = new HandoffsRepository(db);
   const settingsRepo = new SettingsRepository(db);
   const settings = settingsRepo.get();
 
@@ -132,7 +128,7 @@ async function bootstrap(): Promise<void> {
   // 2. MCP config file (write bundled default on first launch).
   const appDataRoot = join(homedir(), APP_DATA_DIRNAME);
   const configPath = join(appDataRoot, MCP_SERVERS_FILENAME);
-  ensureConfigFile(configPath, omnifocusServerEntry());
+  ensureConfigFile(configPath);
 
   // 3. Concurrency queue (shared by scheduler + ingress).
   //    Wire onStart so each run's start (and the current backlog) hits the
@@ -192,10 +188,24 @@ async function bootstrap(): Promise<void> {
     port: 4729,
     getRules: () => rulesRepo.list().filter((r) => r.enabled),
     onMatched: async (event, matched) => {
+      // Handoff enrichment: if this event carries a sessionId with a pending
+      // handoff registered, merge that handoff's opaque context into the event
+      // payload so the fulfilling rule can render {{key}} template variables
+      // (e.g. {{parentTaskId}}). Idempotent: only pending handoffs match, and
+      // the handoff is marked fulfilled after the first run completes.
+      const { event: enrichedEvent, matched: handoffMatched, onFulfilled } =
+        prepareHandoffEnrichment(event, handoffsRepo, handoffsRepo.markFulfilled.bind(handoffsRepo));
+
       for (const rule of matched) {
-        enqueueRun(rule.id, 'event', event).catch((e) =>
-          logError(`event run failed for ${rule.id}`, e),
-        );
+        enqueueRun(rule.id, 'event', enrichedEvent)
+          .then((runId) => {
+            // Mark the handoff fulfilled (no-op if none matched).
+            if (handoffMatched) {
+              onFulfilled(runId, rule.id);
+              logger.info(`handoff fulfilled by run #${runId} (rule=${rule.id})`);
+            }
+          })
+          .catch((e) => logError(`event run failed for ${rule.id}`, e));
       }
     },
     ...(settings.ingressSecret ? { sharedSecret: settings.ingressSecret } : {}),
@@ -203,6 +213,7 @@ async function bootstrap(): Promise<void> {
 
   // 7. IPC handlers.
   registerRulesIpc(rulesRepo);
+  registerHandoffsIpc(handoffsRepo);
   registerRunsIpc(runsRepo, (ruleId, eventPayload) =>
     enqueueRun(
       ruleId,

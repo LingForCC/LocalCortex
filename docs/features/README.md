@@ -22,6 +22,7 @@ Each feature lives in its own subfolder with two files:
 | [**Agent backends**](./agent-backends/README.md) | Choose whether **Claude** or **Codex** runs each rule. Both are first-class; the difference is invisible to the rule text. |
 | [**MCP sources**](./mcp-sources/README.md) | Configure the external systems a rule can touch (GitHub, GitLab, Todoist, OmniFocus, …) in one user-editable file. Placeholder-token detection prevents run failures. |
 | [**Observability (run history)**](./observability/README.md) | Every run is recorded — prompt, tool calls, token cost, duration, result, and the parsed status. The safety net under auto-execute. |
+| [**Handoffs**](./handoffs/README.md) | Register a reminder that fires when an agent session completes — e.g. auto-create a review subtask under the OmniFocus/Todoist task the agent worked on. Manager- and source-agnostic. |
 | [**Stop conditions**](./stop-conditions/README.md) | How rules stop themselves: the agent emits a `done`/`error` status, or structural backstops (`maxRuns`, `expiresAt`) catch the rest. |
 | [**Settings**](./settings/README.md) | Global defaults: the tick interval applied when a rule omits its own, the concurrency cap, an optional event-ingress shared secret, and optional explicit paths to the Codex / Claude Code CLIs. |
 

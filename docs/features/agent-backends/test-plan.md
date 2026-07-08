@@ -76,7 +76,7 @@ Prep: set `ANTHROPIC_API_KEY` (Claude) and/or `OPENAI_API_KEY` (Codex); fill tok
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | A-M5 | Codex run executes | backend `codex`, run it | Run recorded `success` |
-| A-M6 | **Codex receives MCP servers per-call** | run a Codex rule with an `omnifocus` server | agent can call omnifocus MCP tools (the original failing scenario — servers previously never reached Codex) |
+| A-M6 | **Codex receives MCP servers per-call** | run a Codex rule with a `todoist` server | agent can call todoist MCP tools (the original failing scenario — servers previously never reached Codex) |
 | A-M7 | Codex honors `rule.workdir` | set `workdir` to a real path, run | agent's cwd is `rule.workdir` |
 | A-M8 | Codex sandbox `read-only` blocks writes | `sandbox:read-only` | agent can't write files |
 

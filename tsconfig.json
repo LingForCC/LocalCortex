@@ -42,5 +42,5 @@
     "playwright/**/*.ts",
     "vitest-shims/*.ts"
   ],
-  "exclude": ["node_modules", ".vite", "out", "dist", "sinks/omnifocus-jxa"]
+  "exclude": ["node_modules", ".vite", "out", "dist"]
 }

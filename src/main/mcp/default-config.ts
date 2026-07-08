@@ -2,20 +2,21 @@
  * Bundled default mcp-servers.json, written to ~/.localcortex/mcp-servers.json
  * on first launch if the file does not exist.
  *
- * Spec: docs/mcp-servers.md §3 — the four v1 servers with empty token
- * placeholders the user replaces. The `<resolved-at-first-launch>` arg for the
- * OmniFocus server is filled in by the writer (it depends on the install path).
+ * Spec: docs/mcp-servers.md §3 — the three v1 servers with empty token
+ * placeholders the user replaces. (The bundled OmniFocus JXA sink has been
+ * removed; configure any task manager as an external MCP server in the file.)
  */
 
 import type { McpServersFile } from '@shared/types';
 import { PLACEHOLDER_TOKEN } from '@shared/constants';
 
 /**
- * Build the default config. `omnifocusServerEntry` is the absolute path to the
- * compiled OmniFocus JXA MCP server (architecture.md §5.3), resolved at first
- * launch from the app's install location.
+ * Build the default config. No parameters: the default ships only
+ * token-placeholder servers resolved from constants. Any sink (OmniFocus,
+ * Todoist, etc.) is configured by the user as an external MCP server in the
+ * written file.
  */
-export function buildDefaultConfig(omnifocusServerEntry: string): McpServersFile {
+export function buildDefaultConfig(): McpServersFile {
   return {
     servers: {
       github: {
@@ -38,12 +39,6 @@ export function buildDefaultConfig(omnifocusServerEntry: string): McpServersFile
         command: 'npx',
         args: ['-y', '@abhiz123/todoist-mcp-server'],
         env: { TODOIST_API_TOKEN: PLACEHOLDER_TOKEN },
-      },
-      omnifocus: {
-        transport: 'stdio',
-        command: 'node',
-        args: [omnifocusServerEntry],
-        env: {},
       },
     },
   };

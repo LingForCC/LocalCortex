@@ -22,6 +22,7 @@ import type {
   ResolvedMcpServerSchema,
 } from './schemas/mcp-config-schema.js';
 import type { RunSchema } from './schemas/run-schema.js';
+import type { HandoffSchema } from './schemas/handoff-schema.js';
 import type { AppSettingsSchema } from './schemas/settings-schema.js';
 
 // --- Rule model (rule-config-schema.md §10) --------------------------------
@@ -92,6 +93,12 @@ export type Run = z.infer<typeof RunSchema>;
 
 /** Outcome of an agent run, recorded to the `runs` table. */
 export type RunStatus = 'success' | 'error';
+
+// --- Handoffs / pending reviews --------------------------------------------
+
+/** A registered agent-session handoff (pending_reviews row). */
+export type Handoff = z.infer<typeof HandoffSchema>;
+export type HandoffStatus = Handoff['status'];
 
 // --- Global settings (architecture.md §6.4, §6.5) --------------------------
 

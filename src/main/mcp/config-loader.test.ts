@@ -79,16 +79,14 @@ describe('loadMcpServersFile', () => {
 describe('ensureConfigFile', () => {
   it('writes the bundled default with 0600 perms when missing', () => {
     const p = join(dir, 'nested', 'mcp-servers.json');
-    const res = ensureConfigFile(p, '/abs/omnifocus.js');
+    const res = ensureConfigFile(p);
     expect(res.created).toBe(true);
 
     const cfg = parseConfigFile(readFileSync(p, 'utf8'));
-    // Four v1 servers present.
-    expect(Object.keys(cfg.servers).sort()).toEqual(['github', 'gitlab', 'omnifocus', 'todoist']);
+    // Three v1 servers present.
+    expect(Object.keys(cfg.servers).sort()).toEqual(['github', 'gitlab', 'todoist']);
     // Placeholders not filled in by default.
     expect(cfg.servers['github']?.env['GITHUB_PERSONAL_ACCESS_TOKEN']).toBe(PLACEHOLDER_TOKEN);
-    // Omnifocus entry points at the resolved path.
-    expect(cfg.servers['omnifocus']?.args).toEqual(['/abs/omnifocus.js']);
 
     const mode = statSync(p).mode & 0o777;
     expect(mode).toBe(0o600);
@@ -102,15 +100,15 @@ describe('ensureConfigFile', () => {
         servers: { custom: { transport: 'stdio', command: 'my-cmd' } },
       }),
     );
-    const res = ensureConfigFile(p, '/abs/omnifocus.js');
+    const res = ensureConfigFile(p);
     expect(res.created).toBe(false);
     expect(Object.keys(res.config.servers)).toEqual(['custom']);
   });
 
   it('is idempotent', () => {
     const p = join(dir, 'mcp-servers.json');
-    ensureConfigFile(p, '/abs/omnifocus.js');
-    const second = ensureConfigFile(p, '/abs/omnifocus.js');
+    ensureConfigFile(p);
+    const second = ensureConfigFile(p);
     expect(second.created).toBe(false);
   });
 });

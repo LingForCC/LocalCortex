@@ -4,7 +4,7 @@ A local-first Electron + TypeScript desktop app that runs user-defined **natural
 
 The app is a scheduler, an event listener, a prompt manager, and an MCP-server orchestrator. It owns almost no integration code — the agents and the MCP servers do the integration work.
 
-> **Status:** skeleton/scaffolding implementation against the design docs in [`docs/`](./docs). Verified: type-checks, lints, formats, and unit-tests clean (114 tests); the OmniFocus MCP server builds; and the full Electron app builds, packages to `LocalCortex.app`, and launches (DB migrates, event ingress starts). Real agent execution (live Claude/Codex runs, real external writes) is not exercised here — it needs API keys and is non-deterministic.
+> **Status:** skeleton/scaffolding implementation against the design docs in [`docs/`](./docs). Verified: type-checks, lints, formats, and unit-tests clean (114 tests); and the full Electron app builds, packages to `LocalCortex.app`, and launches (DB migrates, event ingress starts). Real agent execution (live Claude/Codex runs, real external writes) is not exercised here — it needs API keys and is non-deterministic.
 
 ## How it works
 
@@ -38,7 +38,6 @@ localcortex/
 │   │   ├── db/               # node:sqlite client, migrations, repositories
 │   │   └── observability/    # logger + run recorder
 │   └── renderer/             # React 19 + Tailwind 4 + shadcn/ui + Zustand
-├── sinks/omnifocus-jxa/      # standalone OmniFocus MCP server (JXA-backed)
 ├── playwright/               # Electron E2E
 └── vitest-shims/             # node:sqlite test shim (see “Testing” below)
 ```
@@ -51,18 +50,17 @@ See [`docs/architecture.md §4`](./docs/architecture.md#4-module-layout) for the
   ```bash
   nvm use v22.14.0
   ```
-- macOS (OmniFocus JXA integration is macOS-only; the rest is cross-platform).
+- macOS (the rest is cross-platform).
 
 ## Setup
 
 ```bash
 nvm use v22.14.0
 npm install
-npm run build:omnifocus   # build the OmniFocus MCP server package once
 ```
 
 On first launch the app writes a default `~/.localcortex/mcp-servers.json`
-containing the four v1 servers (`github`, `gitlab`, `todoist`, `omnifocus`) with
+containing the three v1 servers (`github`, `gitlab`, `todoist`) with
 `<your-token-here>` placeholders. **Edit that file to fill in real tokens** before
 running rules — the lifecycle manager rejects servers that still hold a placeholder.
 
@@ -77,7 +75,6 @@ running rules — the lifecycle manager rejects servers that still hold a placeh
 | `npm run test:e2e`        | Playwright Electron E2E (slower; not part of `npm test`). |
 | `npm run format`          | Prettier write.                                           |
 | `npm run package`         | Package the app via Electron Forge.                       |
-| `npm run build:omnifocus` | Build the `sinks/omnifocus-jxa` MCP server.               |
 
 ## Testing
 

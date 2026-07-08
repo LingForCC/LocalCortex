@@ -17,8 +17,6 @@ export default tseslint.config(
       'coverage/',
       'playwright-report/',
       'test-results/',
-      // The OmniFocus JXA MCP server is a standalone package; linted on its own.
-      'sinks/omnifocus-jxa/',
     ],
   },
   // Base JS recommendations

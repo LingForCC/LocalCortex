@@ -42,8 +42,6 @@ The app is a scheduler, an event listener, a prompt manager, and an MCP-server o
 
 Full rationale, dependency map, and known gotchas are in [tech-stack.md](./tech-stack.md).
 
-**Trade-off accepted:** OmniFocus integration is weaker than a native Swift app would offer (must shell out to JXA/AppleScript rather than in-process automation). Mitigated by a custom thin JXA wrapper (§5).
-
 ---
 
 ## 3. Core architecture
@@ -53,7 +51,7 @@ Full rationale, dependency map, and known gotchas are in [tech-stack.md](./tech-
 Instead of a custom rules engine, the agent (Codex/Claude) **is** the rule engine and orchestrator. Every external system is reached through an existing MCP server:
 
 - **Sources** (read): GitHub → official `github-mcp-server`; GitLab → official GitLab Duo MCP or community `yoda-digital/mcp-gitlab-server`.
-- **Sinks** (write): Todoist → official MCP server; OmniFocus → custom thin JXA wrapper (§5).
+- **Sinks** (write): Todoist → official MCP server.
 
 Build scope collapses to: scheduler + prompt manager + MCP-server orchestrator. Almost no integration code.
 
@@ -143,10 +141,6 @@ localcortex/
 │   │   │   ├── config-loader.ts   ← loads ~/.localcortex/mcp-servers.json
 │   │   │   ├── config.ts          ← serialize to Claude mcpServers / Codex options.config
 │   │   │   └── default-config.ts  ← bundled default written on first launch
-│   │   ├── sinks/                 ← task-manager clients (used by OmniFocus MCP server)
-│   │   │   └── omnifocus-jxa/     ← custom MCP server package (JXA-backed)
-│   │   │       ├── index.ts
-│   │   │       └── scripts/       ← JXA scripts (create, find, update, close)
 │   │   ├── db/
 │   │   │   ├── schema.sql         ← rules, runs tables
 │   │   │   ├── client.ts          ← SQLite wrapper
@@ -167,7 +161,6 @@ localcortex/
 - **`events/`** — the local event ingress for **event-triggered** rules. An HTTP listener on `127.0.0.1:PORT/event` receives POSTed JSON events from external sources (Codex hooks, Claude Code hooks, shell scripts, build tools). The matcher routes each event to rules registered for its `eventType`, optionally filtered by fields like `workdir`, and enqueues an agent run with the event payload rendered into the rule text as template variables. Ships a `codex-hook.sh` that bridges Codex's `session-complete` hook to the ingress. See [§6.7](./architecture.md#67-event-ingress--local-http-listener).
 - **`agent/`** — the `AgentRunner` interface with two implementations (Claude, Codex). The prompt builder renders event template variables (`{{workdir}}`, `{{summary}}`, …) into the rule text, then assembles the full prompt with status contract + available MCP tools. Staging prepares the per-run workdir.
 - **`mcp/`** — the MCP lifecycle manager. Loads `~/.localcortex/mcp-servers.json` (writing the bundled default on first launch), resolves each rule-referenced server name to its full spawn config, and serializes that config per backend (`mcpServers` dict for Claude, `options.config` object for Codex). Server definitions — including credentials — live in the user-editable file, not in code or SQLite. See [mcp-servers.md](./mcp-servers.md).
-- **`sinks/omnifocus-jxa/`** — the custom OmniFocus MCP server (a separate package spawned as a stdio server). Implements create / update / close via JXA scripts.
 - **`db/`** — single SQLite, app-owned. Tables: `rules`, `runs`. The agent runs themselves are stateless from the app's view; the DB tracks config and history. Credentials are **not** stored here — they live in the MCP server config file.
 - **`observability/`** — records every run (prompt, tool calls, token cost, duration, result). The primary safety net under auto-execute.
 
@@ -177,7 +170,7 @@ localcortex/
 
 ### 5.1 Server definitions — user-editable config file
 
-Server definitions live in a **user-editable JSON file** at `~/.localcortex/mcp-servers.json`, not in code. The app writes a bundled default on first launch containing the four v1 servers (with placeholder tokens the user fills in). Rules reference servers by name; the file holds the full spawn config — command, args, and credentials as plaintext env values. This is the same model Claude Desktop and other MCP clients use: users add or modify servers by editing the file, with no code change or schema migration. See [mcp-servers.md](./mcp-servers.md) for the file format, default config, resolution algorithm, and security notes.
+Server definitions live in a **user-editable JSON file** at `~/.localcortex/mcp-servers.json`, not in code. The app writes a bundled default on first launch containing the three v1 servers (with placeholder tokens the user fills in). Rules reference servers by name; the file holds the full spawn config — command, args, and credentials as plaintext env values. This is the same model Claude Desktop and other MCP clients use: users add or modify servers by editing the file, with no code change or schema migration. See [mcp-servers.md](./mcp-servers.md) for the file format, default config, resolution algorithm, and security notes.
 
 The shipped default covers:
 
@@ -186,7 +179,6 @@ The shipped default covers:
 | `github` | source (read) | official `github-mcp-server` | robust |
 | `gitlab` | source (read) | official GitLab Duo MCP or community `yoda-digital/mcp-gitlab-server` | robust |
 | `todoist` | sink (write) | official Todoist MCP server | robust |
-| `omnifocus` | sink (write) | **custom thin JXA wrapper** (bundled) | owned, minimal surface |
 
 Users can rename these, add others (e.g., `github-personal` / `github-work` for multiple accounts), or add entirely new upstreams.
 
@@ -197,18 +189,6 @@ All MCP servers (read and write) are **external stdio servers**, spawned as chil
 1. **Concurrency-safe** — sidesteps the Claude Agent SDK [Issue #122](https://github.com/anthropics/claude-agent-sdk-typescript/issues/122) (concurrent `query()` calls sharing an in-process server collide).
 2. **Uniform across backends** — identical pattern for Claude and Codex (Codex can only use external servers anyway). One lifecycle code path.
 3. **Symmetry with read servers** — GitHub/GitLab are already external; writes use the same pattern.
-
-### 5.3 OmniFocus — custom thin JXA wrapper
-
-A minimal MCP server with three tools:
-
-| Tool | Purpose |
-|---|---|
-| `create_task` | Create a task with name, note, and project |
-| `update_task` | Modify an existing task |
-| `close_task` | Mark a task complete |
-
-Uses **JXA (JavaScript for Automation)** rather than AppleScript strings — Omni's official scripting API, less escaping fragility, callable from Node via `osascript -l JavaScript`. Owned because the community servers' AppleScript-string approach is brittle, and a minimal, controlled surface is easier to keep reliable than adapting a third-party server to the app's needs.
 
 ### 5.4 Lifecycle — respawn per run
 
@@ -381,7 +361,6 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
 - **Per-cycle cost is unavoidable.** Every tick spins up the agent to re-fetch and re-evaluate source state, even when nothing changed. The global default interval (60 min) is set conservatively to bound this; lowering it raises cost linearly. If this becomes a real problem, a deterministic poller can be layered in front of the agent later without re-architecting — the scheduler already owns the cadence, and a poller is just a "should we wake the agent?" check inserted before step 2.
 - **No cross-run write deduplication.** Each agent run is a fresh session with no memory of prior writes, and the app does not track which writes a rule has already performed. The status contract protects **one-off** rules (a rule signaled `done` stops running before it can re-create the same task), but **ongoing rules** — those whose status stays `active` indefinitely, like "watch all my PRs and create a task for any stale one" — may create duplicate tasks on each cycle, because the agent has no way to know it already created a task for the same item on a previous run. One-off rules are also at risk if status parsing fails (the rule keeps running and duplicates on the next cycle). Users should expect to de-duplicate manually in the task manager, or keep ongoing rules scoped narrowly. If this proves painful, an idempotency mechanism (a key written into each task's note at creation + a `find_by_key` content search before creating) can be added without re-architecting — it slots into the prompt contract and the write MCP servers. See [rule-config-schema.md §11](./rule-config-schema.md#11-open-questions-for-future-iterations).
 - **Codex MCP credentials pass as CLI args.** MCP server tokens (e.g. `GITHUB_PERSONAL_ACCESS_TOKEN`) are delivered to Codex via `--config mcp_servers.<name>.env.<KEY>=<value>` flags, which are visible in `ps`/process listings for the duration of the run. This is local to the user's own processes and ephemeral (no file persists), so it avoids the teardown-failure token-leak risk of an on-disk config file — but it is a different surface than a `0600` file. Claude avoids this entirely (servers are passed as an in-memory dict via `options.mcpServers`, never on the command line).
-- **OmniFocus JXA wrapper** is single-machine and process-spawn-per-call. Slower than a REST sink; acceptable at low write volume.
 - **Credentials are stored as plaintext in `~/.localcortex/mcp-servers.json`.** This is the deliberate trade-off of the user-editable config-file approach: the file is self-contained and simple, but anyone with read access to the user's home directory can read the tokens. Mitigation: the app creates the file with `0600` permissions; users who need stronger protection can store it on an encrypted volume. See [mcp-servers.md §8](./mcp-servers.md#8-security-notes).
 - **Codex `--config` overrides merge with, not replace, `~/.codex/config.toml`.** The resolved MCP servers are layered on top of the user's global Codex config via dotted-path `--config` flags, so they coexist with whatever else the user has configured there. If the user has *also* declared a same-named MCP server in `~/.codex/config.toml`, the per-call override wins for that server's fields. Auth (`~/.codex/auth.json`) is read from the normal config home and is unaffected.
 - **Auto-execute means mistakes land in the task manager immediately.** Idempotency keys prevent duplicates but not *wrong* tasks. Observability + easy bulk-edit in the UI are the mitigation. A future dry-run mode or per-run interactive gate (Claude's `canUseTool`) can layer on later without re-architecting.
