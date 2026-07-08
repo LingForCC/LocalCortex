@@ -193,8 +193,8 @@ The app spawns child processes (MCP servers per run, Codex/Claude via SDK). Leak
 
 By default the SDKs spawn their own **bundled, vendored** native binary (resolved via `require.resolve` against a platform-specific npm package), so a globally installed `codex`/`claude` is ignored unless the user opts in via the `codexCliPath` / `claudeCliPath` Settings fields (see [architecture.md §6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary)). When set, that path is validated (exists + executable) on save and passed to the SDK as `codexPathOverride` / `pathToClaudeCodeExecutable`.
 
-### 6.3 Codex per-run `config.toml` contains plaintext tokens
-Each Codex run writes a `.codex/config.toml` with the MCP server credentials into the workdir. **Mitigation:** the staging module deletes the workdir at run teardown, always. This is a security-critical cleanup — test it.
+### 6.3 Codex MCP credentials pass as CLI args
+Codex reads config only from `$CODEX_HOME` (`~/.codex/config.toml`), never from the workdir, so MCP servers are passed per-call via `--config key=value` flags. These flags include credential values (e.g. `mcp_servers.<name>.env.<TOKEN>=<value>`), which are visible in `ps`/process listings for the run's duration. **Trade-off:** this avoids writing a token-bearing file to disk (no teardown-leak risk), but exposes credentials on the command line, local to the user's own processes. Claude avoids this surface (servers passed as an in-memory `options.mcpServers` dict).
 
 ### 6.4 Local HTTP listener security
 The event ingress is loopback-only but any process as the user can POST to it. **Mitigation:** bind strictly to `127.0.0.1`, optionally require a shared-secret token in the POST header (generated at app start, written to a `0600` file the hook scripts read), and log every received event.

@@ -28,7 +28,7 @@ import { evaluateStop } from './stop-check.js';
 import { recordRun } from '../observability/run-recorder.js';
 import { logger } from '../observability/logger.js';
 import { resolveMcpServers } from '../mcp/resolver.js';
-import { stageCodexRun, stageClaudeRun, resolveCwd } from './staging.js';
+import { stageRun } from './staging.js';
 import type { McpServersFile } from '@shared/types';
 
 /** How a backend is selected for a run. */
@@ -89,13 +89,11 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
     eventPayload: req.event?.payload,
   });
 
-  // 2. Stage the workdir per backend.
-  const staged =
-    rule.backend === 'codex'
-      ? stageCodexRun(rule, servers, { runsRoot: appDataRoot, now })
-      : stageClaudeRun(rule, appDataRoot);
-
-  const cwd = rule.backend === 'codex' ? staged.cwd : resolveCwd(rule, appDataRoot);
+  // 2. Stage the workdir. Both backends use the same path: resolve the cwd
+  //    (honoring rule.workdir, falling back to a per-rule scratch dir) and
+  //    ensure it exists. MCP config is per-call now, so staging writes nothing.
+  const staged = stageRun(rule, appDataRoot);
+  const cwd = staged.cwd;
 
   /** Apply the stop-condition decision after a run (shared by success + error paths). */
   const applyStopCheck = (parsedStatus: ReturnType<typeof parseStatusBlock>): void => {
@@ -202,7 +200,8 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
     });
     applyStopCheck(null);
   } finally {
-    // 8. Teardown — security-critical for Codex (deletes config.toml w/ tokens).
+    // 8. Teardown — no-op today (staging writes nothing to disk now that MCP
+    //    config is passed per-call). Kept for symmetry / future use.
     staged.cleanup();
   }
 

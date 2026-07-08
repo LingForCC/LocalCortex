@@ -38,7 +38,7 @@ A **rule** is a natural-language instruction that an agent (Claude or Codex) exe
 | `mcpServers` | yes | Which MCP servers to attach (curates the agent's toolset). Non-empty; every name must exist in `mcp-servers.json`. See [MCP sources](../mcp-sources/README.md). |
 | `backend` | yes | `claude` or `codex`. See [Agent backends](../agent-backends/README.md). |
 | `enabled` | no (default `true`) | Whether the scheduler/ingress will fire the rule. |
-| `workdir` | no | Directory the agent runs in. Omit for a per-rule scratch dir. **Honored for Claude only** — Codex always runs in an ephemeral staged dir (deleted at teardown); see [Agent backends → Limitations](../agent-backends/README.md#limitations-codex). |
+| `workdir` | no | Directory the agent runs in. Omit for a per-rule scratch dir. Honored by both Claude and Codex; see [Agent backends](../agent-backends/README.md). |
 | `sandbox` | no (default `read-only`) | `read-only` or `workspace-write`. Filesystem blast radius only (MCP writes are governed by `mcpServers`). |
 | `maxRuns` | no | Positive integer backstop, or `null` for unlimited. See [Stop conditions](../stop-conditions/README.md). |
 | `expiresAt` | no | ISO timestamp after which the rule auto-disables. |

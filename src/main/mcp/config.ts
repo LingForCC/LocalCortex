@@ -3,8 +3,11 @@
  *
  * Spec: docs/mcp-servers.md §5.
  *  - Claude Agent SDK: per-call `options.mcpServers` dict (§5.1).
- *  - Codex SDK: a `.codex/config.toml` written into the run workdir (§5.2),
- *    including `approval_policy = "never"` (arch §6.3).
+ *  - Codex SDK: per-call `options.config`, flattened by the SDK into
+ *    `--config key=value` CLI flags layered on top of the user's global
+ *    `~/.codex/config.toml` (§5.2). Codex reads config only from `$CODEX_HOME`,
+ *    never from the workdir, so the per-run config file approach used in early
+ *    versions did not work; MCP servers are now passed per-call.
  *
  * Also enforces the placeholder-token check (§5.3): if any env value in a
  * resolved server is still `<your-token-here>`, the run must fail fast with a
@@ -14,6 +17,7 @@
  */
 
 import type { ResolvedMcpServers } from '@shared/types';
+import type { CodexOptions } from '@openai/codex-sdk';
 import { PLACEHOLDER_TOKEN } from '@shared/constants';
 
 /** Thrown when a rule uses a server whose token hasn't been filled in. */
@@ -74,26 +78,55 @@ export function serializeForClaude(
 // --- Codex serialization (mcp-servers.md §5.2) ----------------------------
 
 /**
+ * Serialize resolved servers into a Codex config object passed via the SDK's
+ * `options.config`. The SDK flattens it into `--config key=value` CLI flags
+ * (e.g. `--config mcp_servers.omnifocus.command="npx"`) layered on top of the
+ * user's global `~/.codex/config.toml`.
+ *
+ * `approval_policy` is NOT set here — it's a ThreadOption (approvalPolicy),
+ * which the SDK emits as its own `--config` flag. Keeping it out of the servers
+ * config avoids a redundant/duplicate override.
+ *
+ * The shape mirrors the SDK's flattener expectations (see
+ * `serializeConfigOverrides` in the codex-sdk): nested plain objects recurse,
+ * arrays become TOML inline arrays, and an empty `env` object emits as
+ * `mcp_servers.<name>.env={}`. Dotted env keys (e.g. `my.key`) are safe here
+ * because the flattener joins them as `mcp_servers.<name>.env.my.key`.
+ */
+export function serializeForCodexConfig(servers: ResolvedMcpServers): NonNullable<CodexOptions['config']> {
+  const mcpServers: NonNullable<CodexOptions['config']> = {};
+  for (const [name, def] of Object.entries(servers)) {
+    mcpServers[name] = {
+      command: def.command,
+      args: [...def.args],
+      env: { ...def.env },
+    };
+  }
+  return { mcp_servers: mcpServers };
+}
+
+/**
  * Serialize resolved servers into a Codex `.codex/config.toml` string.
  *
- * Per docs/mcp-servers.md §5.2:
+ * Kept for completeness / a future iteration that may honor `rule.workdir` for
+ * Codex by writing a `config.toml` there. The current runner does NOT use this —
+ * it passes servers per-call via `serializeForCodexConfig` (see codex.ts),
+ * because Codex reads config only from `$CODEX_HOME` (`~/.codex/config.toml`),
+ * not from the workdir, so a workdir-relative file would be ignored.
+ *
+ * Format (docs/mcp-servers.md §5.2):
  *   [mcp_servers.<name>]
  *   command = "..."
  *   args = ["..."]
  *   [mcp_servers.<name>.env]
  *   KEY = "..."
- * plus `approval_policy = "never"` (arch §6.3).
  *
  * Server names and env values are TOML-double-quoted and escaped; dots in names
  * are handled by always quoting the name segment (TOML bare keys can't contain
  * dots, so a quoted key is required for `github-personal`-style names with `-`,
  * and harmless otherwise).
  */
-export function serializeForCodex(
-  servers: ResolvedMcpServers,
-  opts: { approvalPolicy?: 'never' | 'on-request' | 'on-failure' } = {},
-): string {
-  const approvalPolicy = opts.approvalPolicy ?? 'never';
+export function serializeForCodex(servers: ResolvedMcpServers): string {
   const lines: string[] = [];
 
   for (const [name, def] of Object.entries(servers)) {
@@ -108,7 +141,6 @@ export function serializeForCodex(
     }
     lines.push('');
   }
-  lines.push(`approval_policy = ${tomlString(approvalPolicy)}`);
   return lines.join('\n') + '\n';
 }
 

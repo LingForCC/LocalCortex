@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   serializeForClaude,
   serializeForCodex,
+  serializeForCodexConfig,
   assertNoPlaceholders,
   serversWithPlaceholder,
   PlaceholderTokenError,
@@ -40,14 +41,13 @@ describe('serializeForClaude', () => {
 });
 
 describe('serializeForCodex', () => {
-  it('emits mcp_servers tables and approval_policy = "never"', () => {
+  it('emits mcp_servers tables', () => {
     const toml = serializeForCodex({ 'github-personal': servers['github-personal']! });
     expect(toml).toContain('[mcp_servers."github-personal"]');
     expect(toml).toContain('command = "npx"');
     expect(toml).toContain('args = ["-y", "@modelcontextprotocol/server-github"]');
     expect(toml).toContain('[mcp_servers."github-personal".env]');
     expect(toml).toContain('GITHUB_PERSONAL_ACCESS_TOKEN = "ghp_abc"');
-    expect(toml).toContain('approval_policy = "never"');
   });
 
   it('omits the env table when env is empty', () => {
@@ -68,13 +68,38 @@ describe('serializeForCodex', () => {
     });
     expect(toml).toContain('"dotted.key" = "v"');
   });
+});
 
-  it('honors a custom approval policy', () => {
-    const toml = serializeForCodex(
-      { x: { command: 'node', args: [], env: {} } },
-      { approvalPolicy: 'on-request' },
-    );
-    expect(toml).toContain('approval_policy = "on-request"');
+describe('serializeForCodexConfig', () => {
+  it('nests servers under mcp_servers with command/args/env', () => {
+    const config = serializeForCodexConfig({ 'github-personal': servers['github-personal']! });
+    expect(config).toEqual({
+      mcp_servers: {
+        'github-personal': {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_abc' },
+        },
+      },
+    });
+  });
+
+  it('returns an empty env object (not omitted) for servers with no env', () => {
+    // The SDK flattener emits `mcp_servers.<name>.env={}` for empty objects,
+    // which is valid; omitting env entirely would also work but keeping an
+    // explicit {} matches the ResolvedMcpServers shape.
+    const config = serializeForCodexConfig({ bare: { command: 'node', args: ['x'], env: {} } });
+    const mcpServers = config.mcp_servers as unknown as Record<string, unknown>;
+    expect(mcpServers['bare']).toEqual({ command: 'node', args: ['x'], env: {} });
+  });
+
+  it('returns independent copies (mutating output does not touch input)', () => {
+    const config = serializeForCodexConfig(servers);
+    const mcpServers = config.mcp_servers as unknown as {
+      todoist?: { args: string[] };
+    };
+    mcpServers.todoist!.args.push('X');
+    expect(servers['todoist']!.args).not.toContain('X');
   });
 });
 

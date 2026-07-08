@@ -134,14 +134,14 @@ localcortex/
 │   │   ├── agent/
 │   │   │   ├── runner.ts          ← AgentRunner interface (backend-agnostic)
 │   │   │   ├── claude.ts          ← ClaudeAgentRunner (options.cwd, mcpServers)
-│   │   │   ├── codex.ts           ← CodexAgentRunner (workdir + .codex/config.toml)
+│   │   │   ├── codex.ts           ← CodexAgentRunner (workdir + per-call mcp via options.config)
 │   │   │   ├── cli-resolver.ts    ← resolves local codex/claude CLI path (settings → PATH → bundled)
 │   │   │   ├── prompt-builder.ts  ← renders event vars + assembles rule + status contract
 │   │   │   └── staging.ts         ← per-run workdir setup + teardown
 │   │   ├── mcp/
 │   │   │   ├── lifecycle.ts       ← spawn per run, inject config, pass to SDK
 │   │   │   ├── config-loader.ts   ← loads ~/.localcortex/mcp-servers.json
-│   │   │   ├── config.ts          ← serialize to Claude mcpServers / Codex config.toml
+│   │   │   ├── config.ts          ← serialize to Claude mcpServers / Codex options.config
 │   │   │   └── default-config.ts  ← bundled default written on first launch
 │   │   ├── sinks/                 ← task-manager clients (used by OmniFocus MCP server)
 │   │   │   └── omnifocus-jxa/     ← custom MCP server package (JXA-backed)
@@ -166,7 +166,7 @@ localcortex/
 - **`scheduler/`** — owns the per-rule timers for **tick-triggered** rules and the concurrency cap (shared with the event path). Reads `tickIntervalSeconds` per rule, falls back to the global default. Enqueues agent runs into the capped-parallelism queue.
 - **`events/`** — the local event ingress for **event-triggered** rules. An HTTP listener on `127.0.0.1:PORT/event` receives POSTed JSON events from external sources (Codex hooks, Claude Code hooks, shell scripts, build tools). The matcher routes each event to rules registered for its `eventType`, optionally filtered by fields like `workdir`, and enqueues an agent run with the event payload rendered into the rule text as template variables. Ships a `codex-hook.sh` that bridges Codex's `session-complete` hook to the ingress. See [§6.7](./architecture.md#67-event-ingress--local-http-listener).
 - **`agent/`** — the `AgentRunner` interface with two implementations (Claude, Codex). The prompt builder renders event template variables (`{{workdir}}`, `{{summary}}`, …) into the rule text, then assembles the full prompt with status contract + available MCP tools. Staging prepares the per-run workdir.
-- **`mcp/`** — the MCP lifecycle manager. Loads `~/.localcortex/mcp-servers.json` (writing the bundled default on first launch), resolves each rule-referenced server name to its full spawn config, and serializes that config per backend (`mcpServers` for Claude, `.codex/config.toml` for Codex). Server definitions — including credentials — live in the user-editable file, not in code or SQLite. See [mcp-servers.md](./mcp-servers.md).
+- **`mcp/`** — the MCP lifecycle manager. Loads `~/.localcortex/mcp-servers.json` (writing the bundled default on first launch), resolves each rule-referenced server name to its full spawn config, and serializes that config per backend (`mcpServers` dict for Claude, `options.config` object for Codex). Server definitions — including credentials — live in the user-editable file, not in code or SQLite. See [mcp-servers.md](./mcp-servers.md).
 - **`sinks/omnifocus-jxa/`** — the custom OmniFocus MCP server (a separate package spawned as a stdio server). Implements create / update / close via JXA scripts.
 - **`db/`** — single SQLite, app-owned. Tables: `rules`, `runs`. The agent runs themselves are stateless from the app's view; the DB tracks config and history. Credentials are **not** stored here — they live in the MCP server config file.
 - **`observability/`** — records every run (prompt, tool calls, token cost, duration, result). The primary safety net under auto-execute.
@@ -214,16 +214,16 @@ Uses **JXA (JavaScript for Automation)** rather than AppleScript strings — Omn
 
 Every agent run spawns the MCP servers it needs; they die when the run ends. At a 60-min cadence the ~2s cold-boot is irrelevant, and per-run isolation eliminates an entire class of bugs (zombie servers, stale connections, pool exhaustion). Each run is fully self-contained.
 
-### 5.5 MCP config asymmetry between backends
+### 5.5 MCP config delivery between backends
 
 | | Claude Agent SDK | Codex SDK |
 |---|---|---|
-| MCP config | Per-call: `options.mcpServers` | Config-file: `.codex/config.toml` in the workdir |
-| Working dir | `options.cwd` | inferred from workdir / `startThread` |
-| Approval | `canUseTool` callback (not used in v1 — auto-execute) | `approval_policy = "never"` in config.toml |
+| MCP config | Per-call: `options.mcpServers` | Per-call: `options.config` → flattened to `--config key=value` CLI flags |
+| Working dir | `options.cwd` | `startThread` `workingDirectory` (honors `rule.workdir`) |
+| Approval | `canUseTool` callback (not used in v1 — auto-execute) | `approvalPolicy: 'never'` (ThreadOptions) |
 | CLI binary | `options.pathToClaudeCodeExecutable` | `codexPathOverride` (CodexOptions) |
 
-Both are handled by the `AgentRunner` abstraction; the difference is invisible to the rest of the app. Each backend's CLI binary is resolved per run via [§6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary): an explicit path from Settings, else the first match on `PATH`, else the SDK's bundled vendored binary.
+Both backends take MCP config **per-call** — the difference is only in the delivery channel, invisible to the rest of the app. For Codex, the resolved servers are serialized into a config object (`serializeForCodexConfig`) and passed via the SDK's `options.config`, which the SDK flattens into repeated `--config mcp_servers.<name>.<field>=<value>` flags. These layer on top of the user's global `~/.codex/config.toml`, so Codex's normal config/auth home (`$CODEX_HOME`) is undisturbed — there is no per-run config file written to disk. Each backend's CLI binary is resolved per run via [§6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary): an explicit path from Settings, else the first match on `PATH`, else the SDK's bundled vendored binary.
 
 ---
 
@@ -231,12 +231,12 @@ Both are handled by the `AgentRunner` abstraction; the difference is invisible t
 
 ### 6.1 Working directory — first-class rule field
 
-Each rule declares a `workdir`. Used differently per backend:
+Each rule declares a `workdir`, honored by **both** backends:
 
-- **Claude** — passed as `options.cwd` to `query()`. Independent of MCP config (which is passed in-call).
-- **Codex** — `rule.workdir` is **ignored**. The SDK reads MCP config only from a `.codex/config.toml` in the directory it launches in (§5.5), and that file contains plaintext tokens (§8). Writing it into a user-chosen `workdir` would (a) pollute a real project with a token-bearing file, (b) clobber any pre-existing `.codex/config.toml` the user maintains there, and (c) be catastrophic if teardown failed — the file could be `git add`-ed and pushed. Instead the app always stages an ephemeral per-run workdir at `~/.localcortex/runs/<rule-id>/<timestamp>/`, writes the generated `.codex/config.toml` there, and deletes it at run teardown (§8). The two concerns — cwd and MCP config — converge in that one staged directory.
+- **Claude** — passed as `options.cwd` to `query()`.
+- **Codex** — passed as `startThread`'s `workingDirectory` (which the SDK turns into a `--cd` flag). MCP config is delivered per-call (§5.5), so the workdir holds no config file and `rule.workdir` can be honored directly.
 
-> **Known limitation (Codex):** because Codex's cwd is always the ephemeral staged dir, a Codex rule cannot run *in* `rule.workdir` the way a Claude rule can. A Codex rule that needs to read or modify files in a user-chosen directory must either (a) reach them by absolute path via MCP server tools, or (b) have its prompt reference `{{workdir}}` from an event payload and operate through MCP. A future iteration may honor `rule.workdir` for Codex by writing/restoring a `config.toml` inside it (and handling pre-existing config + gitignore concerns), but this is not done in v1.
+When `workdir` is unset, both backends fall back to a per-rule scratch dir at `<appData>/work/<rule-id>/`.
 
 ### 6.2 Sandbox — tied to rule intent
 
@@ -246,14 +246,14 @@ Each rule declares a `workdir`. Used differently per backend:
 | Draft changes for review | user's project path | workspace-write |
 | Stateless transformation | per-rule scratch dir | workspace-write |
 
-Claude: enforced via `allowedTools` whitelist. Codex: enforced via `--sandbox` / `sandbox_mode` in config.toml.
+Claude: enforced via `allowedTools` whitelist. Codex: enforced via the `sandboxMode` ThreadOption (which the SDK passes as `--sandbox`).
 
 ### 6.3 Safety — auto-execute
 
 Both backends run unattended with approval disabled:
 
-- Claude: `canUseTool` always-allow (or no callback).
-- Codex: `approval_policy = "never"` in the per-run config.toml.
+- Claude: `permissionMode: 'bypassPermissions'`.
+- Codex: `approvalPolicy: 'never'` (ThreadOptions, emitted as a `--config approval_policy="never"` flag).
 
 Writes happen immediately. **Observability is the safety net, not a review step.** Every run records prompt, tool calls, token cost, duration, result — for post-hoc debugging of non-determinism. There is no pre-write approval gate and no cross-run write deduplication (see [§8](./architecture.md#8-known-constraints--risks)).
 
@@ -360,7 +360,7 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
 **Shared flow:**
 
 1. A run is dequeued from the capped-parallelism queue (§6.4).
-2. **Staging** prepares the per-run workdir (Codex: writes `.codex/config.toml`).
+2. **Staging** resolves the workdir (honoring `rule.workdir`, else a per-rule scratch dir) and ensures it exists. MCP config is passed per-call, so nothing is written to disk here.
 3. **MCP lifecycle** spawns the servers the rule needs (read + write), wires credentials.
 4. **Prompt builder** renders the event payload into the rule text (event-triggered only — `{{workdir}}`, `{{summary}}`, etc. become concrete values), then assembles: rule + status contract + available MCP tools.
 5. **AgentRunner** (Claude or Codex per rule) runs the agent in the workdir with MCP servers attached. The agent:
@@ -378,12 +378,10 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
 
 - **Per-cycle cost is unavoidable.** Every tick spins up the agent to re-fetch and re-evaluate source state, even when nothing changed. The global default interval (60 min) is set conservatively to bound this; lowering it raises cost linearly. If this becomes a real problem, a deterministic poller can be layered in front of the agent later without re-architecting — the scheduler already owns the cadence, and a poller is just a "should we wake the agent?" check inserted before step 2.
 - **No cross-run write deduplication.** Each agent run is a fresh session with no memory of prior writes, and the app does not track which writes a rule has already performed. The status contract protects **one-off** rules (a rule signaled `done` stops running before it can re-create the same task), but **ongoing rules** — those whose status stays `active` indefinitely, like "watch all my PRs and create a task for any stale one" — may create duplicate tasks on each cycle, because the agent has no way to know it already created a task for the same item on a previous run. One-off rules are also at risk if status parsing fails (the rule keeps running and duplicates on the next cycle). Users should expect to de-duplicate manually in the task manager, or keep ongoing rules scoped narrowly. If this proves painful, an idempotency mechanism (a key written into each task's note at creation + a `find_by_key` content search before creating) can be added without re-architecting — it slots into the prompt contract and the write MCP servers. See [rule-config-schema.md §11](./rule-config-schema.md#11-open-questions-for-future-iterations).
-- **Codex path is the harder one.** Config-file MCP, workdir staging, and the `exec`-mode approval limitations mean the Codex `AgentRunner` carries more complexity than Claude's. ~70% of integration debugging will land here. See [Issue #26602](https://github.com/openai/codex/issues/26602) for an example of `codex exec` flag friction.
+- **Codex MCP credentials pass as CLI args.** MCP server tokens (e.g. `GITHUB_PERSONAL_ACCESS_TOKEN`) are delivered to Codex via `--config mcp_servers.<name>.env.<KEY>=<value>` flags, which are visible in `ps`/process listings for the duration of the run. This is local to the user's own processes and ephemeral (no file persists), so it avoids the teardown-failure token-leak risk of an on-disk config file — but it is a different surface than a `0600` file. Claude avoids this entirely (servers are passed as an in-memory dict via `options.mcpServers`, never on the command line).
 - **OmniFocus JXA wrapper** is single-machine and process-spawn-per-call. Slower than a REST sink; acceptable at low write volume.
 - **Credentials are stored as plaintext in `~/.localcortex/mcp-servers.json`.** This is the deliberate trade-off of the user-editable config-file approach: the file is self-contained and simple, but anyone with read access to the user's home directory can read the tokens. Mitigation: the app creates the file with `0600` permissions; users who need stronger protection can store it on an encrypted volume. See [mcp-servers.md §8](./mcp-servers.md#8-security-notes).
-- **Codex per-run `config.toml` duplicates tokens into the workdir.** Each Codex run writes a `.codex/config.toml` containing the same plaintext tokens (Codex reads MCP config only from a file, not per-call). The staging module must delete the workdir at run teardown — otherwise plaintext tokens accumulate under `~/.localcortex/runs/`. Claude avoids this entirely (per-call config, nothing written to disk).
-- **Codex teardown is best-effort, so `rule.workdir` is not honored.** Teardown runs in a `finally` block, so it covers normal success *and* thrown-error paths — but **not** process death (app crash, force-quit, `SIGKILL`, power loss). If a token-bearing `config.toml` were written into the user's `rule.workdir` and teardown never ran, the file would survive in a real project — at risk of being `git add`-ed and pushed, and overwriting any pre-existing `.codex/config.toml` the user maintains there. The design therefore stages Codex runs in an app-owned ephemeral dir (`~/.localcortex/runs/<rule-id>/<timestamp>/`) where a missed teardown is merely a token file in an obscure folder, not a leak into the user's repo. A future iteration may honor `rule.workdir` for Codex by write-then-restore of a `config.toml` (handling pre-existing config + gitignore), but this is deferred. See §6.1.
-- **Codex rules cannot draft filesystem changes that persist.** Because the Codex cwd is the ephemeral staged dir (deleted at teardown), any files the agent writes to its working directory are wiped at run end. A Codex rule that needs to create or modify files in a real project must do so through MCP server tools that target absolute paths, not by writing into its cwd. Claude does not have this restriction (`rule.workdir` is honored, and Claude writes nothing to disk).
+- **Codex `--config` overrides merge with, not replace, `~/.codex/config.toml`.** The resolved MCP servers are layered on top of the user's global Codex config via dotted-path `--config` flags, so they coexist with whatever else the user has configured there. If the user has *also* declared a same-named MCP server in `~/.codex/config.toml`, the per-call override wins for that server's fields. Auth (`~/.codex/auth.json`) is read from the normal config home and is unaffected.
 - **Auto-execute means mistakes land in the task manager immediately.** Idempotency keys prevent duplicates but not *wrong* tasks. Observability + easy bulk-edit in the UI are the mitigation. A future dry-run mode or per-run interactive gate (Claude's `canUseTool`) can layer on later without re-architecting.
 - **Stop-condition detection depends on parsing a JSON suffix from the agent's output.** If the agent omits the status block, emits malformed JSON, or embeds it mid-message where the parser can't find it, the app can't detect `done` and the rule keeps running until it hits the `maxRuns`/`expiresAt` backstop (or runs forever if neither is set). Mitigation: the parser should be lenient (scan the whole transcript for the first valid status block), the prompt contract should strongly emphasize the suffix requirement, and `maxRuns` should have a sensible default so no rule is truly unbounded. If parsing proves unreliable in practice, the fallback is a dedicated `set_rule_status` tool call instead of a JSON suffix.
 - **The event ingress is a local HTTP listener.** It binds to `127.0.0.1` only (loopback, not the network), but any process running as the user can POST events to it and trigger agent runs — which under auto-execute means writes to the task manager. Mitigation: bind strictly to loopback, optionally require a shared secret token in the POST header (configured in settings), and log every received event. The blast radius is bounded by `mcpServers` (a rule can only touch its declared servers) but a malicious local process could still trigger spurious runs.

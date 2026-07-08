@@ -100,7 +100,7 @@ for each name in rule.mcpServers:
      → run fails fast ("edit mcp-servers.json and set the token for 'X'")
 ```
 
-The resolved config is then serialized per backend: Claude gets it as `options.mcpServers` (per-call); Codex gets it written into a per-run `.codex/config.toml`. See [Agent backends](../agent-backends/README.md).
+The resolved config is then serialized per backend: Claude gets it as `options.mcpServers` (per-call); Codex gets it as `options.config`, flattened into `--config` flags (per-call). See [Agent backends](../agent-backends/README.md).
 
 ### Why `mcpServers` is the only structural selector
 Function-calling models degrade as the tool list grows. With six configured servers, spawning all of them every run means the agent sees 60–120 tools and starts calling the wrong server or hallucinating tools. Curating the toolset per rule keeps the agent accurate and bounds the **credential blast radius** — a rule can only touch the systems its servers connect to.
@@ -131,7 +131,7 @@ Define two entries (`github-personal`, `github-work`) pointing at different toke
 - **Tokens are plaintext** in the file. Anyone with read access to your home directory (malware as you, backups, accidental sharing) can read them. Mitigation: `0600` perms (applied on first launch); store the file on an encrypted volume if you need more. See [design: security notes §8](../../mcp-servers.md#8-security-notes).
 - **Credentials reach servers only at spawn time** as process env. Not retained in app memory beyond the run.
 - **Per-run respawn** — each server process lives only for one agent run. No long-lived process holds credentials.
-- **Codex duplicates tokens into the workdir** (`~/.localcortex/runs/<rule-id>/<ts>/.codex/config.toml`). The run-loop **deletes** the workdir at teardown. Claude writes nothing to disk.
+- **Codex passes tokens as CLI args** (`--config mcp_servers.<name>.env.<TOKEN>=<value>`), visible in `ps` during the run. No token file is written to disk. Claude passes servers as an in-memory dict, never on the command line.
 - **Never commit the file.** It's gitignored. Distribute tokens out of band.
 
 ## Gotchas

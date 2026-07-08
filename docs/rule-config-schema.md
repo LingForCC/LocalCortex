@@ -153,7 +153,7 @@ Both backends are first-class — every rule declares which one runs it. See [ar
 The `AgentRunner` interface abstracts the difference:
 
 - **`claude`** — uses `options.cwd` for the workdir and `options.mcpServers` for in-call MCP config.
-- **`codex`** — uses a per-run staged workdir with a generated `.codex/config.toml` declaring the MCP servers and `approval_policy = "never"`.
+- **`codex`** — uses `startThread`'s `workingDirectory` for the workdir and the SDK's `options.config` for in-call MCP config (serialized into `--config key=value` flags).
 
 ---
 
@@ -167,8 +167,8 @@ The directory the agent's session runs from — see [architecture.md §6.1](./ar
 "workdir": "/Users/colin/code/my-repo"
 ```
 
-- **Claude** — passed as `options.cwd`. Independent of MCP config.
-- **Codex** — **`workdir` is ignored.** The SDK reads MCP config only from a `.codex/config.toml` in its launch directory (§5.5), and that file carries plaintext tokens (§8). Rather than write it into a user-chosen `workdir` (which would pollute a real project, clobber any pre-existing `.codex/config.toml`, and risk committing tokens if teardown failed), the app always runs Codex in an ephemeral staged dir at `~/.localcortex/runs/<rule-id>/<timestamp>/` and deletes it at run teardown. A Codex rule that needs to touch files in a specific directory must reach them by absolute path via MCP server tools. See [architecture.md §6.1](./architecture.md#61-working-directory--first-class-rule-field) and [§8](./architecture.md#8-known-constraints--risks).
+- **Claude** — passed as `options.cwd`.
+- **Codex** — passed as `startThread`'s `workingDirectory`. MCP config is delivered per-call (§5.5), so the workdir holds no config file and `rule.workdir` is honored directly.
 
 If omitted, defaults to a per-rule scratch directory. For event-triggered rules where the event carries a `workdir` field, the user may also choose to use `{{workdir}}` dynamically — but note the agent's `workdir` (where it runs) is set at config time, not rendered from the event. If you want the agent to run *in* the session's directory, set `workdir` to that path explicitly per rule, or accept the default scratch dir and let the agent read files by absolute path from the event payload.
 

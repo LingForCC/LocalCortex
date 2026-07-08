@@ -3,11 +3,14 @@
  *
  * Spec: docs/architecture.md §5.5, §6.1-§6.3; docs/mcp-servers.md §5.2.
  *
- * Codex differs from Claude (architecture.md §5.5):
- *  - MCP config comes from `.codex/config.toml` in the workdir, NOT a per-call
- *    param. The staging module (staging.ts) writes that file before the runner
- *    is invoked; this runner expects it to exist in `input.workdir`.
- *  - `approval_policy = "never"` lives in the same config.toml (auto-execute).
+ * MCP config is per-call, same as Claude (architecture.md §5.5): the resolved
+ * servers are serialized into a config object and passed via the SDK's
+ * `options.config`, which the SDK flattens into `--config key=value` CLI flags
+ * layered on top of the user's global `~/.codex/config.toml`. (Codex reads
+ * config only from `$CODEX_HOME` (`~/.codex/config.toml`), never from the
+ * workdir, so writing a `.codex/config.toml` into the run dir does not work.)
+ *
+ *  - `approval_policy = "never"` is set via ThreadOptions (auto-execute, §6.3).
  *  - Workdir + sandbox are set via ThreadOptions.
  *
  * The runner is otherwise symmetric with Claude: normalize the result (text,
@@ -21,6 +24,7 @@ import {
   type ThreadEvent,
   type Input,
 } from '@openai/codex-sdk';
+import { serializeForCodexConfig, assertNoPlaceholders } from '../mcp/config.js';
 import type {
   AgentRunner,
   RunInput,
@@ -54,14 +58,21 @@ export class CodexAgentRunner implements AgentRunner {
   constructor(private readonly opts: CodexRunnerOptions = {}) {}
 
   async run(input: RunInput, onEvent?: RunEventCallback): Promise<RunResult> {
+    // Validate the servers we're about to attach BEFORE spawning.
+    assertNoPlaceholders(input.servers);
+
     let codex: Codex;
     let thread: Thread;
     try {
       // Merge the SDK base options with an optional local-CLI override
       // (arch §6.5.1). When codexPathOverride is undefined the SDK resolves its
       // bundled vendored binary (default behavior).
+      // MCP servers are passed per-call via `config` → `--config` flags, merged
+      // on top of any config already in codexOptions (arch §5.5).
+      const baseConfig = this.opts.codexOptions?.config ?? {};
       const codexOptions: CodexOptions = {
-        ...(this.opts.codexOptions ?? {}),
+        ...this.opts.codexOptions,
+        config: { ...baseConfig, ...serializeForCodexConfig(input.servers) },
         ...(this.opts.codexPathOverride
           ? { codexPathOverride: this.opts.codexPathOverride }
           : {}),

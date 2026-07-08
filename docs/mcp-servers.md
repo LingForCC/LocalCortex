@@ -196,31 +196,22 @@ query({
 });
 ```
 
-### 5.2 Codex SDK — `.codex/config.toml`
+### 5.2 Codex SDK — per-call `options.config` (`--config` flags)
 
-Codex reads MCP config from a `config.toml` in the workdir. The lifecycle manager writes one per run into the staged workdir (see [architecture.md §6.1](./architecture.md#61-working-directory--first-class-rule-field)):
+Codex reads its config **only from `$CODEX_HOME` (`~/.codex/config.toml`)**, never from the working directory — so a per-run `.codex/config.toml` written into the workdir would be ignored. Instead the resolved servers are passed **per-call** via the SDK's `options.config`. The SDK flattens that object into repeated `--config key=value` CLI flags, layered on top of the user's global `~/.codex/config.toml`:
 
-```toml
-# ~/.localcortex/runs/<rule-id>/<timestamp>/.codex/config.toml
-
-[mcp_servers.github-personal]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-github"]
-
-[mcp_servers."github-personal.env"]
-GITHUB_PERSONAL_ACCESS_TOKEN = "ghp_abc123..."
-
-[mcp_servers.todoist]
-command = "npx"
-args = ["-y", "@abhiz123/todoist-mcp-server"]
-
-[mcp_servers.todoist.env]
-TODOIST_API_TOKEN = "tod_abc123..."
-
-approval_policy = "never"
+```bash
+codex exec \
+  --config 'mcp_servers.github-personal.command="npx"' \
+  --config 'mcp_servers.github-personal.args=["-y","@modelcontextprotocol/server-github"]' \
+  --config 'mcp_servers.github-personal.env.GITHUB_PERSONAL_ACCESS_TOKEN="ghp_abc123..."' \
+  --config 'mcp_servers.todoist.command="npx"' \
+  --config 'mcp_servers.todoist.args=["-y","@abhiz123/todoist-mcp-server"]' \
+  --config 'mcp_servers.todoist.env.TODOIST_API_TOKEN="tod_abc123..."' \
+  ...
 ```
 
-The Codex SDK launches in that workdir and picks up both the MCP servers and the auto-execute approval policy.
+`approval_policy` is not part of this servers config — it's set via the `approvalPolicy: 'never'` ThreadOption, which the SDK emits as its own `--config` flag. Nothing is written to disk, so there is no token-bearing file to clean up at teardown.
 
 ### 5.3 Placeholder validation
 
@@ -270,7 +261,7 @@ Resolution:
   → resolved: npx ...todoist-mcp-server  env TODOIST_API_TOKEN=tod_abc123...
 ```
 
-Serialized for Claude → `options.mcpServers` (§5.1). Serialized for Codex → `.codex/config.toml` (§5.2). The SDK spawns both servers as stdio child processes, and the agent connects to them for the duration of the run.
+Serialized for Claude → `options.mcpServers` (§5.1). Serialized for Codex → `options.config` flattened into `--config` flags (§5.2). The SDK spawns both servers as stdio child processes, and the agent connects to them for the duration of the run.
 
 ---
 
@@ -312,7 +303,7 @@ Then a rule can use `"mcpServers": ["jira-acme", "todoist"]` and describe in its
   - **Mitigation:** set the file permissions to `0600` (owner read/write only) when the app creates it. Document this clearly. Users who need stronger protection can store the file on an encrypted volume or use a secrets manager that materializes the file at login.
 - **Credentials reach servers only via process env at spawn time.** The lifecycle manager reads the file, sets the env vars on each spawned child process, and the child reads them as normal env. The tokens are not retained in app memory beyond the run.
 - **Per-run respawn** ([architecture.md §5.4](./architecture.md#54-lifecycle--respawn-per-run)) means no long-lived process holds credentials. Each server process lives only for the duration of one agent run.
-- **The per-run `.codex/config.toml` (§5.2) duplicates tokens into the workdir.** This file lives under `~/.localcortex/runs/<rule-id>/<timestamp>/`. **It must be deleted at run teardown** — the staging module owns this cleanup. This is a known risk surface specific to Codex (Claude uses per-call config and writes nothing to disk).
+- **Codex passes tokens as CLI args.** MCP server credentials reach Codex via `--config mcp_servers.<name>.env.<KEY>=<value>` flags, visible in `ps`/process listings for the run's duration. This is local to the user's own processes and ephemeral — no token-bearing file is written to disk, so there is nothing to clean up at teardown. Claude avoids this surface entirely (servers passed as an in-memory `options.mcpServers` dict).
 - **The config file must not be committed to version control** or shared verbatim. Users managing rules in git (a future feature) should treat `mcp-servers.json` like `.env` — gitignored, distributed out of band.
 
 ---
@@ -321,4 +312,3 @@ Then a rule can use `"mcpServers": ["jira-acme", "todoist"]` and describe in its
 
 - **Version pinning:** `npx -y` fetches latest on each spawn. For reproducibility and to mitigate supply-chain risk, v1.1+ should pin exact versions in `args` (e.g., `@modelcontextprotocol/server-github@1.2.3`). Users can do this manually today in their config file.
 - **Hot reload:** if the user edits `mcp-servers.json`, does the running app pick it up, or is an app restart required? v1 likely loads at startup; hot-reload is a v1.1 convenience.
-- **Codex credential cleanup:** the per-run `config.toml` contains plaintext tokens (§8). Confirming the staging teardown reliably deletes the workdir is an implementation priority.

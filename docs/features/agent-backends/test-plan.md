@@ -1,6 +1,6 @@
 # Agent Backends — Test Plan
 
-Covers the **`AgentRunner` abstraction**, the **Claude** and **Codex** runner implementations, and **workdir staging/teardown** (including the security-critical Codex config.toml cleanup).
+Covers the **`AgentRunner` abstraction**, the **Claude** and **Codex** runner implementations, and **workdir staging**. Both backends pass MCP config per-call (Claude via `options.mcpServers`, Codex via `options.config` → `--config` flags), so staging writes nothing to disk.
 
 Real agent execution is **not** unit-tested (it needs live API keys + CLIs and is non-deterministic — see [tech-stack §5](../../tech-stack.md#5-testing-strategy)). The contract is verified through the run-loop with a **stub runner**, and the SDK-coupled code is type-checked and structurally exercised.
 
@@ -8,8 +8,8 @@ Real agent execution is **not** unit-tested (it needs live API keys + CLIs and i
 
 ## In scope
 - `AgentRunner` interface + `RunInput`/`RunResult` shapes.
-- Per-backend config serialization (Claude `mcpServers`, Codex `config.toml`).
-- Codex workdir staging + **teardown deletes tokens**.
+- Per-backend config serialization (Claude `mcpServers`, Codex `options.config` object).
+- Codex receives resolved servers per-call (via `input.servers`).
 - Placeholder-token check before spawn.
 
 ## Out of scope (verified elsewhere)
@@ -30,7 +30,7 @@ Real agent execution is **not** unit-tested (it needs live API keys + CLIs and i
 ## Unit tests
 
 ### Run-loop with a stub runner — `src/main/agent/run-loop.test.ts`
-**Status:** ✅ covered — 7 cases. Uses an in-memory DB + a stub `AgentRunner` returning canned transcripts, so the full enqueue → stage → resolve → prompt → run → record → stop-check path is exercised without any SDK.
+**Status:** ✅ covered — 9 cases. Uses an in-memory DB + a stub `AgentRunner` returning canned transcripts, so the full enqueue → stage → resolve → prompt → run → record → stop-check path is exercised without any SDK.
 
 | # | Case | Expected |
 | --- | --- | --- |
@@ -38,16 +38,15 @@ Real agent execution is **not** unit-tested (it needs live API keys + CLIs and i
 | A-U2 | agent signals `done` → rule disabled | ✅ existing |
 | A-U3 | agent signals `active` → rule stays enabled | ✅ existing |
 | A-U4 | event payload renders into prompt | ✅ existing |
-| A-U5 | **Codex: `.codex/config.toml` exists during run; workdir deleted after** | ✅ existing (security-critical) |
+| A-U5 | **Codex: resolved servers passed per-call via `input.servers`** | ✅ existing |
+| A-U5b | **Codex: `rule.workdir` honored as cwd** | ✅ existing |
 | A-U6 | undefined MCP server → throws before run | ✅ existing |
 | A-U7 | runner fails post-staging → recorded as an `error` run (no throw); setup failures still throw | ✅ existing |
 
-> A-U6 vs A-U7 together fix the `executeRun` contract: **setup** problems (missing rule, undefined MCP server, placeholder tokens at staging) throw before there's anything to record; an **agent-side** failure (e.g. missing API key) is recorded as an `error` run so it shows up in Run history — the safety net under auto-execute.
+> A-U6 vs A-U7 together fix the `executeRun` contract: **setup** problems (missing rule, undefined MCP server, placeholder tokens at spawn) throw before there's anything to record; an **agent-side** failure (e.g. missing API key) is recorded as an `error` run so it shows up in Run history — the safety net under auto-execute.
 
 ### Config serialization — `src/main/mcp/config.test.ts`
-**Status:** ✅ covered — 10 cases (see [MCP sources test-plan](../mcp-sources/test-plan.md)). Includes the Codex TOML shape (`[mcp_servers."name"]`, env table, `approval_policy = "never"`) and placeholder detection that both runners depend on.
-
-> **Add:** a case asserting `serializeForCodex` writes `approval_policy = "never"` (currently implicit in the existing TOML assertions).
+**Status:** ✅ covered — 12 cases (see [MCP sources test-plan](../mcp-sources/test-plan.md)). Includes the Codex `options.config` object shape (`mcp_servers.<name>` with command/args/env), the legacy TOML serializer, and placeholder detection that both runners depend on.
 
 ---
 
@@ -77,14 +76,9 @@ Prep: set `ANTHROPIC_API_KEY` (Claude) and/or `OPENAI_API_KEY` (Codex); fill tok
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | A-M5 | Codex run executes | backend `codex`, run it | Run recorded `success` |
-| A-M6 | **Codex teardown deletes workdir + tokens** | run a Codex rule; after completion, `ls ~/.localcortex/runs/<rule-id>/` | empty (timestamp dir gone) |
-| A-M7 | Codex `.codex/config.toml` had `approval_policy="never"` | inspect during run (add a temporary log) | present |
+| A-M6 | **Codex receives MCP servers per-call** | run a Codex rule with an `omnifocus` server | agent can call omnifocus MCP tools (the original failing scenario — servers previously never reached Codex) |
+| A-M7 | Codex honors `rule.workdir` | set `workdir` to a real path, run | agent's cwd is `rule.workdir` |
 | A-M8 | Codex sandbox `read-only` blocks writes | `sandbox:read-only` | agent can't write files |
-
-### Crash cleanup
-| # | Case | Steps | Expected |
-| --- | --- | --- | --- |
-| A-M9 | Force-quit mid-run leaves a workdir | kill -9 the app during a Codex run | `~/.localcortex/runs/<rule-id>/<ts>/` survives; **clean it up manually** (contains plaintext tokens) |
 
 ---
 

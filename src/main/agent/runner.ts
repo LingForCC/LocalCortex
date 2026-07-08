@@ -2,10 +2,11 @@
  * The AgentRunner abstraction — the single interface the rest of the app uses
  * to run an agent, regardless of backend (Claude or Codex).
  *
- * Spec: docs/architecture.md §4 (agent/), §5.5 (MCP config asymmetry between
- * backends). The difference between Claude (per-call `options.mcpServers` +
- * `options.cwd`) and Codex (per-run staged workdir + `.codex/config.toml`) is
- * invisible to callers — it lives in the two implementations.
+ * Spec: docs/architecture.md §4 (agent/), §5.5 (MCP config delivery between
+ * backends). Both backends take MCP config per-call — Claude via
+ * `options.mcpServers`, Codex via the SDK `config` option (flattened to
+ * `--config key=value` CLI flags). The difference is invisible to callers —
+ * it lives in the two implementations.
  *
  * This module owns ONLY the interface + shared types. The runners themselves
  * (claude.ts, codex.ts) import the SDKs; this file stays SDK-free so anything

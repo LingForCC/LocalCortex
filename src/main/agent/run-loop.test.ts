@@ -12,7 +12,7 @@ import { RunsRepository } from '../db/repositories/runs.js';
 import { executeRun } from './run-loop.js';
 import type { AgentRunner, RunInput, RunResult, RunEventCallback } from './runner.js';
 import { logger } from '../observability/logger.js';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -153,7 +153,7 @@ describe('executeRun', () => {
     expect(run?.eventPayload).toContain('/code/app');
   });
 
-  it('deletes the staged Codex workdir after the run (token cleanup)', async () => {
+  it('passes resolved MCP servers to the Codex runner per-call', async () => {
     const rulesRepo = new RulesRepository(db);
     const runsRepo = new RunsRepository(db);
     rulesRepo.create(makeRule({ backend: 'codex' }));
@@ -161,10 +161,44 @@ describe('executeRun', () => {
     const codexRunner: AgentRunner = {
       backend: 'codex',
       async run(input: RunInput) {
-        // The .codex/config.toml must exist during the run.
-        const toml = readFileSync(join(input.workdir, '.codex', 'config.toml'), 'utf8');
-        expect(toml).toContain('approval_policy = "never"');
-        expect(toml).toContain('FOO = "bar"');
+        // MCP config is per-call now: the resolved servers must be in
+        // input.servers (the runner serializes them into --config flags).
+        expect(input.servers.omnifocus).toBeDefined();
+        expect(input.servers.omnifocus).toEqual({
+          command: 'node',
+          args: ['x.js'],
+          env: { FOO: 'bar' },
+        });
+        return { text: '{"status":"done"}', toolCalls: [], isError: false };
+      },
+    };
+
+    const runId = await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => codexRunner,
+        appDataRoot: appData,
+        trigger: 'tick',
+      },
+      { ruleId: 'r1' },
+    );
+
+    expect(runId).toBeGreaterThan(0);
+  });
+
+  it('honors rule.workdir for the Codex runner cwd (no ephemeral staged dir)', async () => {
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    const workdir = mkdtempSync(join(tmpdir(), 'lc-codex-wd-'));
+    rulesRepo.create(makeRule({ backend: 'codex', workdir }));
+
+    const codexRunner: AgentRunner = {
+      backend: 'codex',
+      async run(input: RunInput) {
+        // Codex now runs in rule.workdir (previously an ephemeral staged dir).
+        expect(input.workdir).toBe(workdir);
         return { text: '{"status":"done"}', toolCalls: [], isError: false };
       },
     };
@@ -180,12 +214,6 @@ describe('executeRun', () => {
       },
       { ruleId: 'r1' },
     );
-
-    // After teardown, the per-run workdir (containing the token-bearing config)
-    // must be gone.
-    const { readdirSync } = await import('node:fs');
-    const runsDir = join(appData, 'r1');
-    expect(readdirSync(runsDir)).toEqual([]); // timestamp subdir deleted
   });
 
   it('throws when the rule references an undefined MCP server', async () => {
