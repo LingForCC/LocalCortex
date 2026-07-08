@@ -13,7 +13,7 @@ The `AgentRunner` abstraction hides the two SDKs' differences behind one interfa
 | Concern | Claude | Codex |
 | --- | --- | --- |
 | MCP config | per-call: `options.mcpServers` | config file: `.codex/config.toml` in the workdir |
-| Working dir | `options.cwd` | the workdir the SDK launches in |
+| Working dir | `options.cwd` (honors `rule.workdir`) | ephemeral staged dir (`~/.localcortex/runs/<rule-id>/<ts>/`); `rule.workdir` is **ignored** (see [Limitations](#limitations-codex)) |
 | Approval (auto-execute) | `permissionMode: 'bypassPermissions'` | `approval_policy = "never"` in config.toml |
 | CLI binary override | `pathToClaudeCodeExecutable` | `codexPathOverride` |
 | Result usage | `usage.input_tokens` / `output_tokens` | `turn.usage.input_tokens` / `output_tokens` |
@@ -63,6 +63,17 @@ Both backends go through the same shared run-loop; only the spawn differs:
 
 ---
 
+## Limitations (Codex)
+
+The Codex SDK reads MCP config **only** from a `.codex/config.toml` in the directory it launches in (§5.5) — there is no per-call API. That file contains plaintext tokens, and teardown is best-effort (a `finally` block; does not run on crash/`SIGKILL`/force-quit). Writing it into a user-chosen `rule.workdir` would risk polluting a real project, clobbering a pre-existing `.codex/config.toml`, and leaking committed tokens if teardown failed. Two consequences follow:
+
+1. **`rule.workdir` is ignored for Codex.** Every Codex run launches in an ephemeral staged dir (`~/.localcortex/runs/<rule-id>/<timestamp>/`), never in the user's `workdir`. Claude honors `rule.workdir`; Codex does not.
+2. **Codex cannot persist filesystem changes.** The staged cwd is deleted at teardown, so any files the agent writes to its working directory are wiped at run end. A Codex rule that needs to create or modify files in a real project must do so through MCP server tools that target absolute paths. For "draft edits in my repo" workflows, use Claude.
+
+A future iteration may honor `rule.workdir` for Codex by writing then restoring a `config.toml` inside it (handling pre-existing config + gitignore), but this is deferred. See [architecture.md §6.1](../../architecture.md#61-working-directory--first-class-rule-field) and [§8](../../architecture.md#8-known-constraints--risks).
+
+---
+
 ## Worked examples
 
 ### Read-only triage (Claude)
@@ -75,7 +86,7 @@ The agent can read your repo and call MCP servers, but can't modify files. Good 
 ```jsonc
 { "backend": "codex", "sandbox": "workspace-write", "workdir": "/Users/colin/code/web-app" }
 ```
-The agent can draft edits in your repo for you to review. MCP config is staged into a per-run `.codex/` dir and removed when the run ends.
+> **`workdir` is ignored for Codex** (see [Limitations](#limitations-codex) below). The agent runs in an ephemeral staged directory that is deleted at teardown, so it **cannot** draft filesystem edits into `/Users/colin/code/web-app` — any files written to its cwd vanish at run end. To create or modify files in a real project, the rule must do so through MCP server tools that target absolute paths. For drafting changes directly in a repo, use Claude (which honors `workdir`).
 
 ---
 
@@ -83,6 +94,7 @@ The agent can draft edits in your repo for you to review. MCP config is staged i
 
 - **Credentials are required to actually run.** Without `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (and the respective CLI), clicking **Run** on a rule fails at agent spawn with a clear error. Creating/saving rules works without credentials.
 - **Codex leaves tokens on disk during the run.** The per-run `.codex/config.toml` contains plaintext tokens. Teardown deletes it, but if a run is killed mid-flight (app crash, force-quit), the dir may survive under `~/.localcortex/runs/`. Inspect/clean manually if needed.
+- **Codex ignores `rule.workdir`.** See [Limitations (Codex)](#limitations-codex) above — a Codex rule runs in an ephemeral staged dir, not the declared `workdir`, and cannot persist filesystem writes.
 - **The result text is what the status parser scans.** Both backends' final text is fed to the [status-block parser](../stop-conditions/README.md). If an agent wraps the JSON in prose or omits it, stop detection falls back to structural backstops.
 
 ## Related
