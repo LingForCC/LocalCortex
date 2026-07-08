@@ -66,7 +66,18 @@ Under auto-execute, the agent's decisions land in your task manager (or repo, fo
 
 ## Logging (main process)
 
-In addition to the `runs` table, the main process writes structured, rotating logs via `electron-log` to `~/Library/Logs/LocalCortex/` on macOS. Each run logs a one-line summary (id, rule, trigger, status, tokens, ms, parsed status). The event ingress logs every received event. Renderer errors/warnings are forwarded to the main log too. These logs are the first place to look when a run misbehaves and the DB record isn't enough.
+In addition to the `runs` table, the main process writes structured, rotating logs via `electron-log` to `~/Library/Logs/LocalCortex/` on macOS. The event ingress logs every received event. Renderer errors/warnings are forwarded to the main log too. These logs are the first place to look when a run misbehaves and the DB record isn't enough.
+
+During and after each run you'll see:
+
+- **On start** — a `run starting (running=N, queued=M)` line when the run is dispatched from the concurrency queue (so you can tell the app is alive and see backlog depth).
+- **During the run (live progress)** — one line per intermediate event the runner emits, as it happens:
+  - `run rule=<id> tool_call <tool> args=<…>` when the agent invokes a tool,
+  - `run rule=<id> tool_result <tool> ok|FAILED [error=…]` when that tool returns,
+  - `run rule=<id> text: <truncated assistant text>` for agent output.
+- **On completion** — a one-line summary: `run #<id> rule=<id> trigger=<t> status=<success|error> tokens=<in>/<out> ms=<n> [parsedStatus=<…>] [error=<…>]`.
+
+Because a run can take a while, `tail -f ~/Library/Logs/LocalCortex/main.log` is the way to confirm a run is progressing (and pinpoint where it stalls) without waiting for it to finish. Agent-side failures are also recorded as `error` runs in the table, so the failure always shows up in both places.
 
 ---
 

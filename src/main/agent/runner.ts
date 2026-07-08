@@ -37,6 +37,27 @@ export interface ObservedToolCall {
   result?: unknown;
 }
 
+/**
+ * Intermediate progress events emitted *during* a run, before `run()` resolves.
+ * Backend-agnostic and SDK-free: each runner normalizes its own event stream into
+ * these shapes. Consumed by the run-loop for live logging (and, later, for the
+ * "active run" UI). Deliberately coarse — `tool_call` fires when a tool is
+ * invoked, `tool_result` when it returns, `assistant_text` for assistant output.
+ * Backends that surface only a subset simply omit the others (e.g. neither
+ * backend reports a `result` payload here today).
+ */
+export type RunEvent =
+  | { type: 'tool_call'; tool: string; args?: unknown }
+  | { type: 'tool_result'; tool: string; ok: boolean; error?: string }
+  | { type: 'assistant_text'; text: string };
+
+/**
+ * Optional progress sink handed to `AgentRunner.run`. Runners that can stream
+ * intermediate events call this as they occur; runners that can't simply ignore
+ * it. Kept optional so existing callers/tests keep working unchanged.
+ */
+export type RunEventCallback = (event: RunEvent) => void;
+
 /** The outcome of a run, normalized across backends. */
 export interface RunResult {
   /** The agent's final text response. */
@@ -69,8 +90,13 @@ export interface AgentRunner {
    *  - auto-execute (no pre-write approval) — arch §6.3;
    *  - tearing down any per-run resources (workdir staging teardown happens
    *    outside the runner, in staging.ts/run-loop.ts).
+   *
+   * `onEvent`, if provided, receives intermediate progress events during the
+   * run (tool calls/results, assistant text) so callers can surface live
+   * progress before the run resolves. Optional and best-effort — runners that
+   * cannot stream simply never call it.
    */
-  run(input: RunInput): Promise<RunResult>;
+  run(input: RunInput, onEvent?: RunEventCallback): Promise<RunResult>;
 }
 
 /** Thrown when an AgentRunner fails to even start a run (before any agent output). */

@@ -135,7 +135,15 @@ async function bootstrap(): Promise<void> {
   ensureConfigFile(configPath, omnifocusServerEntry());
 
   // 3. Concurrency queue (shared by scheduler + ingress).
-  const queue = new ConcurrencyQueue({ concurrency: settings.concurrency });
+  //    Wire onStart so each run's start (and the current backlog) hits the
+  //    file log — the only live "is it running?" signal available today, since
+  //    runs are otherwise recorded only at completion.
+  const queue = new ConcurrencyQueue({
+    concurrency: settings.concurrency,
+    onStart: ({ running, queued }) => {
+      logger.info(`run starting (running=${running}, queued=${queued})`);
+    },
+  });
 
   // 4. Runner provider + a manual/tick/event enqueue path.
   //    Pass a getter (not a snapshot) so settings changes apply to the next

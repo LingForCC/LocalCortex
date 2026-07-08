@@ -18,10 +18,16 @@ import {
   Codex,
   type CodexOptions,
   type Thread,
-  type ThreadItem,
+  type ThreadEvent,
   type Input,
 } from '@openai/codex-sdk';
-import type { AgentRunner, RunInput, RunResult, ObservedToolCall } from './runner.js';
+import type {
+  AgentRunner,
+  RunInput,
+  RunResult,
+  ObservedToolCall,
+  RunEventCallback,
+} from './runner.js';
 import { AgentRunError } from './runner.js';
 
 /** Map our sandbox enum to Codex's SandboxMode. */
@@ -47,7 +53,7 @@ export class CodexAgentRunner implements AgentRunner {
 
   constructor(private readonly opts: CodexRunnerOptions = {}) {}
 
-  async run(input: RunInput): Promise<RunResult> {
+  async run(input: RunInput, onEvent?: RunEventCallback): Promise<RunResult> {
     let codex: Codex;
     let thread: Thread;
     try {
@@ -81,44 +87,77 @@ export class CodexAgentRunner implements AgentRunner {
       // the type checker, which the SDK then tried to iterate → "input is not
       // iterable".
       const userInput: Input = input.prompt;
-      const turn = await thread.run(userInput, input.signal ? { signal: input.signal } : undefined);
 
-      const text = turn.finalResponse ?? '';
+      // Stream the turn (instead of awaiting `thread.run()`) so we can surface
+      // per-item progress via `onEvent` as the agent works. We still reconstruct
+      // the same RunResult shape at the end.
+      const streamed = await thread.runStreamed(
+        userInput,
+        input.signal ? { signal: input.signal } : undefined,
+      );
+
+      let text = '';
       const toolCalls: ObservedToolCall[] = [];
-      for (const item of turn.items) {
-        const tc = codexItemToToolCall(item);
-        if (tc) toolCalls.push(tc);
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
+      let isError = false;
+      let errorMessage: string | undefined;
+
+      for await (const evt of streamed.events as AsyncIterable<ThreadEvent>) {
+        switch (evt.type) {
+          case 'turn.failed':
+            isError = true;
+            errorMessage = evt.error.message;
+            break;
+          case 'turn.completed':
+            inputTokens = evt.usage.input_tokens;
+            outputTokens = evt.usage.output_tokens;
+            break;
+          case 'error':
+            isError = true;
+            errorMessage = evt.message;
+            break;
+          case 'item.completed': {
+            // Capture agent text + tool calls into the final result, and emit
+            // progress events for tool calls so the operator can watch the run.
+            const item = evt.item as { type?: string; [k: string]: unknown };
+            if (item.type === 'agent_message') {
+              const t = (item as { text?: string }).text ?? '';
+              text += t;
+              if (t) onEvent?.({ type: 'assistant_text', text: t });
+            } else if (item.type === 'mcp_tool_call') {
+              const tool = `mcp:${(item as { server?: string }).server ?? '?'}/${(item as { tool?: string }).tool ?? '?'}`;
+              toolCalls.push({ tool, args: (item as { arguments?: unknown }).arguments });
+              onEvent?.({ type: 'tool_call', tool, args: (item as { arguments?: unknown }).arguments });
+              onEvent?.({
+                type: 'tool_result',
+                tool,
+                ok: (item as { status?: string }).status !== 'failed',
+                error: (item as { error?: { message?: string } }).error?.message,
+              });
+            } else if (item.type === 'command_execution') {
+              const cmd = (item as { command?: string }).command;
+              toolCalls.push({ tool: 'command_execution', args: cmd });
+              onEvent?.({ type: 'tool_call', tool: 'command_execution', args: cmd });
+              onEvent?.({
+                type: 'tool_result',
+                tool: 'command_execution',
+                ok: (item as { status?: string }).status !== 'failed',
+              });
+            }
+            break;
+          }
+          default:
+            // thread.started / turn.started / item.started / item.updated are
+            // intentionally not surfaced — too chatty for the live log and they
+            // duplicate the start/completed signal.
+            break;
+        }
       }
 
-      const usage = turn.usage;
-      return {
-        text,
-        toolCalls,
-        inputTokens: usage?.input_tokens,
-        outputTokens: usage?.output_tokens,
-        isError: false,
-      };
+      return { text, toolCalls, inputTokens, outputTokens, isError, error: errorMessage };
     } catch (e) {
       throw new AgentRunError(`Codex run failed: ${(e as Error).message}`, e);
     }
-  }
-}
-
-/** Extract an ObservedToolCall from a ThreadItem, if it represents a tool call. */
-function codexItemToToolCall(item: ThreadItem): ObservedToolCall | null {
-  const it = item as { type?: string; [k: string]: unknown };
-  switch (it.type) {
-    case 'command_execution':
-      return {
-        tool: 'command_execution',
-        args: (it as { command?: unknown[] }).command,
-      };
-    case 'mcp_tool_call':
-      return {
-        tool: `mcp:${(it as { server?: string; name?: string }).server ?? '?'}/${(it as { name?: string }).name ?? '?'}`,
-        args: (it as { arguments?: unknown }).arguments,
-      };
-    default:
-      return null;
   }
 }

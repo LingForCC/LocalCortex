@@ -21,10 +21,12 @@
 import type { Rule, ResolvedMcpServers, IncomingEvent } from '@shared/types';
 import type { RulesRepository } from '../db/repositories/rules.js';
 import type { RunsRepository, NewRun } from '../db/repositories/runs.js';
-import type { AgentRunner } from './runner.js';
+import type { AgentRunner, RunEvent } from './runner.js';
 import { buildPrompt } from './prompt-builder.js';
 import { parseStatusBlock } from './status-parser.js';
 import { evaluateStop } from './stop-check.js';
+import { recordRun } from '../observability/run-recorder.js';
+import { logger } from '../observability/logger.js';
 import { resolveMcpServers } from '../mcp/resolver.js';
 import { stageCodexRun, stageClaudeRun, resolveCwd } from './staging.js';
 import type { McpServersFile } from '@shared/types';
@@ -111,15 +113,42 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
     }
   };
 
+  /**
+   * Live progress sink handed to the runner. Each intermediate event the agent
+   * emits is surfaced to the file log so an operator can watch a slow run
+   * progress (and see exactly when/where it stalls) rather than staring at
+   * silence until completion. Kept deliberately terse — one line per event.
+   */
+  const logEvent = (event: RunEvent): void => {
+    if (event.type === 'tool_call') {
+      logger.info(
+        `run rule=${rule.id} tool_call ${event.tool}` +
+          (event.args != null ? ` args=${JSON.stringify(event.args).slice(0, 120)}` : ''),
+      );
+    } else if (event.type === 'tool_result') {
+      logger.info(
+        `run rule=${rule.id} tool_result ${event.tool} ${event.ok ? 'ok' : 'FAILED'}` +
+          (event.error ? ` error=${event.error}` : ''),
+      );
+    } else {
+      // assistant_text — truncate to keep the log scannable; the full text lands
+      // in the run record's `result` column at completion.
+      logger.info(`run rule=${rule.id} text: ${event.text.slice(0, 160)}`);
+    }
+  };
+
   let runId: number;
   try {
     // 5. Run the agent.
-    const result = await runner.run({
-      prompt,
-      workdir: cwd,
-      sandbox: rule.sandbox,
-      servers,
-    });
+    const result = await runner.run(
+      {
+        prompt,
+        workdir: cwd,
+        sandbox: rule.sandbox,
+        servers,
+      },
+      logEvent,
+    );
 
     const endedAt = now().toISOString();
     const durationMs = Date.now() - startMs;
@@ -143,7 +172,9 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
       error: result.error,
       eventPayload: req.event?.payload,
     };
-    runId = runsRepo.create(newRun);
+    // Record via the run-recorder so the run is both persisted AND surfaced as
+    // a one-line summary in the file log (docs/features/observability §"Logging").
+    runId = recordRun(runsRepo, newRun);
 
     // 7. Stop check.
     applyStopCheck(parsedStatus);
@@ -157,7 +188,7 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
     // throw from above, before there is anything meaningful to record.
     const durationMs = Date.now() - startMs;
     const message = e instanceof Error ? e.message : String(e);
-    runId = runsRepo.create({
+    runId = recordRun(runsRepo, {
       ruleId: rule.id,
       trigger,
       startedAt,

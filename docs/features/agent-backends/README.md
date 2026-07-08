@@ -16,7 +16,7 @@ The `AgentRunner` abstraction hides the two SDKs' differences behind one interfa
 | Working dir | `options.cwd` (honors `rule.workdir`) | ephemeral staged dir (`~/.localcortex/runs/<rule-id>/<ts>/`); `rule.workdir` is **ignored** (see [Limitations](#limitations-codex)) |
 | Approval (auto-execute) | `permissionMode: 'bypassPermissions'` | `approval_policy = "never"` in config.toml |
 | CLI binary override | `pathToClaudeCodeExecutable` | `codexPathOverride` |
-| Result usage | `usage.input_tokens` / `output_tokens` | `turn.usage.input_tokens` / `output_tokens` |
+| Result usage | `usage.input_tokens` / `output_tokens` | `usage.input_tokens` / `output_tokens` (on the `turn.completed` event) |
 
 Everything else — staging the workdir, resolving MCP servers, building the prompt, recording the run, checking stop conditions — is **shared** and lives in the run-loop.
 
@@ -57,7 +57,7 @@ Both backends go through the same shared run-loop; only the spawn differs:
 1. **Staging** — Claude: ensures `workdir` exists (per-call config, nothing written). Codex: creates `~/.localcortex/runs/<rule-id>/<timestamp>/` and writes `.codex/config.toml` with the resolved MCP servers + `approval_policy = "never"`.
 2. **MCP resolution + placeholder check** — both: servers resolved from `mcp-servers.json`; run fails fast if any env value is still `<your-token-here>`.
 3. **Prompt** — identical for both (rendered rule + status contract + tool list).
-4. **Agent run** — Claude streams `SDKMessage`s (assistant text, tool_use, result); Codex returns a `Turn` with items + finalResponse.
+4. **Agent run** — both backends stream. Claude iterates `SDKMessage`s (assistant text, `tool_use`, result); Codex iterates the `runStreamed()` event stream (`item.completed`, `turn.completed`, …). Each runner normalizes its stream into the same result and optionally emits intermediate progress events (tool calls, assistant text) to the run-loop for live logging (see [Observability → Logging](../observability/README.md#logging-main-process)).
 5. **Normalize** — both produce `{ text, toolCalls[], inputTokens, outputTokens, isError }`.
 6. **Teardown** — Claude: no-op. Codex: **deletes the staged workdir** (removes the token-bearing config.toml).
 

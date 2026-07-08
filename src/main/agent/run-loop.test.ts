@@ -4,13 +4,14 @@
  * exercised without any SDK or Electron.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { openMemoryDatabase } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
 import { RulesRepository } from '../db/repositories/rules.js';
 import { RunsRepository } from '../db/repositories/runs.js';
 import { executeRun } from './run-loop.js';
-import type { AgentRunner, RunInput, RunResult } from './runner.js';
+import type { AgentRunner, RunInput, RunResult, RunEventCallback } from './runner.js';
+import { logger } from '../observability/logger.js';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -241,6 +242,48 @@ describe('executeRun', () => {
     expect(run?.toolCalls).toEqual([]);
     // durationMs is recorded and non-negative (observability test-plan O-L gap).
     expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('forwards intermediate progress events from the runner to the log', async () => {
+    // The run-loop hands the runner an onEvent callback that logs each event
+    // (tool_call / tool_result / assistant_text). A runner that emits events
+    // should produce matching log lines — this is the live-progress signal an
+    // operator tails during a slow run.
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    rulesRepo.create(makeRule());
+
+    const emittingRunner: AgentRunner = {
+      backend: 'claude',
+      async run(_input: RunInput, onEvent?: RunEventCallback): Promise<RunResult> {
+        onEvent?.({ type: 'tool_call', tool: 'mcp__omnifocus__create_task', args: { title: 'X' } });
+        onEvent?.({ type: 'tool_result', tool: 'mcp__omnifocus__create_task', ok: true });
+        onEvent?.({ type: 'assistant_text', text: 'Created the task.' });
+        return { text: '{"status":"active"}', toolCalls: [], isError: false };
+      },
+    };
+
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => emittingRunner,
+        appDataRoot: appData,
+        trigger: 'manual',
+      },
+      { ruleId: 'r1' },
+    );
+
+    // Each event type produced one log line, tagged with the rule id.
+    const lines = infoSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes('tool_call mcp__omnifocus__create_task'))).toBe(true);
+    expect(lines.some((l) => l.includes('tool_result mcp__omnifocus__create_task ok'))).toBe(true);
+    expect(lines.some((l) => l.includes('text: Created the task.'))).toBe(true);
+
+    infoSpy.mockRestore();
   });
 });
 

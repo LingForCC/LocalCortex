@@ -16,7 +16,7 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ResolvedMcpServers } from '@shared/types';
 import { serializeForClaude, assertNoPlaceholders } from '../mcp/config.js';
-import type { AgentRunner, RunInput, RunResult, ObservedToolCall } from './runner.js';
+import type { AgentRunner, RunInput, RunResult, ObservedToolCall, RunEventCallback } from './runner.js';
 import { AgentRunError } from './runner.js';
 
 /** Tool names permitted in read-only mode (architecture.md §6.2). */
@@ -42,7 +42,7 @@ export class ClaudeAgentRunner implements AgentRunner {
 
   constructor(private readonly opts: ClaudeRunnerOptions = {}) {}
 
-  async run(input: RunInput): Promise<RunResult> {
+  async run(input: RunInput, onEvent?: RunEventCallback): Promise<RunResult> {
     // Validate the servers we're about to attach BEFORE spawning.
     assertNoPlaceholders(input.servers);
 
@@ -86,6 +86,7 @@ export class ClaudeAgentRunner implements AgentRunner {
               if (b.type === 'text' && typeof b.text === 'string') text += b.text;
               else if (b.type === 'tool_use') {
                 toolCalls.push({ tool: b.name ?? 'unknown', args: b.input });
+                onEvent?.({ type: 'tool_call', tool: b.name ?? 'unknown', args: b.input });
               }
             }
           }
