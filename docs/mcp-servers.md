@@ -205,13 +205,17 @@ codex exec \
   --config 'mcp_servers.github-personal.command="npx"' \
   --config 'mcp_servers.github-personal.args=["-y","@modelcontextprotocol/server-github"]' \
   --config 'mcp_servers.github-personal.env.GITHUB_PERSONAL_ACCESS_TOKEN="ghp_abc123..."' \
+  --config 'mcp_servers.github-personal.default_tools_approval_mode="approve"' \
   --config 'mcp_servers.todoist.command="npx"' \
   --config 'mcp_servers.todoist.args=["-y","@abhiz123/todoist-mcp-server"]' \
   --config 'mcp_servers.todoist.env.TODOIST_API_TOKEN="tod_abc123..."' \
+  --config 'mcp_servers.todoist.default_tools_approval_mode="approve"' \
   ...
 ```
 
 `approval_policy` is not part of this servers config — it's set via the `approvalPolicy: 'never'` ThreadOption, which the SDK emits as its own `--config` flag. Nothing is written to disk, so there is no token-bearing file to clean up at teardown.
+
+> **`default_tools_approval_mode = "approve"` is required.** Under `approval_policy = "never"` in headless `exec` mode, Codex has no interactive user to approve the per-MCP-tool elicitation prompt and auto-cancels each MCP call (reported as "user cancelled MCP tool call"). Setting `default_tools_approval_mode = "approve"` per server pre-approves its tools so the app can run unattended. This is bounded by each rule's `mcpServers` list (the credential blast-radius boundary).
 
 ### 5.3 Placeholder validation
 

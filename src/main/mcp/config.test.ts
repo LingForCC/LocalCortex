@@ -71,7 +71,7 @@ describe('serializeForCodex', () => {
 });
 
 describe('serializeForCodexConfig', () => {
-  it('nests servers under mcp_servers with command/args/env', () => {
+  it('nests servers under mcp_servers with command/args/env + pre-approved tools', () => {
     const config = serializeForCodexConfig({ 'github-personal': servers['github-personal']! });
     expect(config).toEqual({
       mcp_servers: {
@@ -79,6 +79,7 @@ describe('serializeForCodexConfig', () => {
           command: 'npx',
           args: ['-y', '@modelcontextprotocol/server-github'],
           env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_abc' },
+          default_tools_approval_mode: 'approve',
         },
       },
     });
@@ -90,7 +91,12 @@ describe('serializeForCodexConfig', () => {
     // explicit {} matches the ResolvedMcpServers shape.
     const config = serializeForCodexConfig({ bare: { command: 'node', args: ['x'], env: {} } });
     const mcpServers = config.mcp_servers as unknown as Record<string, unknown>;
-    expect(mcpServers['bare']).toEqual({ command: 'node', args: ['x'], env: {} });
+    expect(mcpServers['bare']).toEqual({
+      command: 'node',
+      args: ['x'],
+      env: {},
+      default_tools_approval_mode: 'approve',
+    });
   });
 
   it('returns independent copies (mutating output does not touch input)', () => {

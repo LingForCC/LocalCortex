@@ -87,6 +87,14 @@ export function serializeForClaude(
  * which the SDK emits as its own `--config` flag. Keeping it out of the servers
  * config avoids a redundant/duplicate override.
  *
+ * `default_tools_approval_mode = "approve"` IS set per server. In headless/exec
+ * mode under `approval_policy = "never"`, Codex has no interactive user to
+ * approve the per-MCP-tool elicitation prompt, so it auto-cancels each MCP tool
+ * call (surfacing as "user cancelled MCP tool call"). Pre-approving each server's
+ * tools avoids that — without it, no Codex+MCP rule can call tools unattended,
+ * which defeats the app's purpose. This mirrors what users typically set in
+ * their own ~/.codex/config.toml. (OpenAI issues #16685, #24135, #16394.)
+ *
  * The shape mirrors the SDK's flattener expectations (see
  * `serializeConfigOverrides` in the codex-sdk): nested plain objects recurse,
  * arrays become TOML inline arrays, and an empty `env` object emits as
@@ -100,6 +108,9 @@ export function serializeForCodexConfig(servers: ResolvedMcpServers): NonNullabl
       command: def.command,
       args: [...def.args],
       env: { ...def.env },
+      // Pre-approve this server's tools so headless exec doesn't auto-cancel
+      // every MCP tool call (see JSDoc above).
+      default_tools_approval_mode: 'approve',
     };
   }
   return { mcp_servers: mcpServers };

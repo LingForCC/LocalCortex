@@ -225,6 +225,8 @@ Every agent run spawns the MCP servers it needs; they die when the run ends. At 
 
 Both backends take MCP config **per-call** — the difference is only in the delivery channel, invisible to the rest of the app. For Codex, the resolved servers are serialized into a config object (`serializeForCodexConfig`) and passed via the SDK's `options.config`, which the SDK flattens into repeated `--config mcp_servers.<name>.<field>=<value>` flags. These layer on top of the user's global `~/.codex/config.toml`, so Codex's normal config/auth home (`$CODEX_HOME`) is undisturbed — there is no per-run config file written to disk. Each backend's CLI binary is resolved per run via [§6.5.1](./architecture.md#651-cli-resolution--local-vs-bundled-binary): an explicit path from Settings, else the first match on `PATH`, else the SDK's bundled vendored binary.
 
+> **Codex MCP tools must be pre-approved.** Under `approval_policy = "never"` in headless/exec mode, Codex has no interactive user to approve the per-MCP-tool elicitation prompt and auto-cancels each call, surfacing as a misleading "user cancelled MCP tool call". `serializeForCodexConfig` therefore sets `default_tools_approval_mode = "approve"` on every server so the app can run MCP tools unattended. This is bounded by each rule's `mcpServers` list (the credential blast-radius boundary) and matches what users typically set in their own `~/.codex/config.toml`. See OpenAI issues [#16685](https://github.com/openai/codex/issues/16685), [#24135](https://github.com/openai/codex/issues/24135).
+
 ---
 
 ## 6. Execution model

@@ -67,6 +67,7 @@ MCP servers are passed per-call via `--config key=value` flags (§5.5), layered 
 
 1. **Credentials appear in process args.** Token values ride as `--config mcp_servers.<name>.env.<TOKEN>=<value>`, so they're visible via `ps` for the run's duration. This is local to your own processes and ephemeral (no file persists), but it's a different surface than a `0600` file. Claude passes servers as an in-memory dict and never exposes them on the command line.
 2. **Per-call overrides merge with your global Codex config.** If you declare a same-named MCP server in `~/.codex/config.toml`, the per-call override wins for that run. Auth (`~/.codex/auth.json`) is read from the normal config home and is unaffected.
+3. **MCP tools are pre-approved per server.** Under `approvalPolicy: 'never'` in headless mode, Codex would otherwise auto-cancel every MCP tool call ("user cancelled MCP tool call"). Each server is emitted with `default_tools_approval_mode = "approve"` so tools can run unattended — bounded by each rule's `mcpServers` list (the credential blast-radius boundary).
 
 ---
 
