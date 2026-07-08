@@ -12,6 +12,11 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './playwright',
+  // Build the app (main + preload + renderer into .vite/) once before tests, so
+  // launching .vite/build/main.js directly has a renderer to loadFile. Without
+  // this, every test sees a blank window (MAIN_WINDOW_VITE_DEV_SERVER_URL is
+  // undefined outside `electron-forge start`). See playwright/global-setup.ts.
+  globalSetup: './playwright/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

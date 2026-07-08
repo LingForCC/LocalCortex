@@ -221,7 +221,10 @@ async function createWindow(): Promise<void> {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    await mainWindow.loadFile(join(__dirname, '../renderer/main_window/src/renderer/index.html'));
+    // Built renderer output (vite.renderer.config.ts `build.outDir`). This branch
+    // runs whenever the app is launched outside `electron-forge start` — most
+    // importantly from Playwright E2E, which launches .vite/build/main.js directly.
+    await mainWindow.loadFile(join(__dirname, '../renderer/main_window/index.html'));
   }
 }
 

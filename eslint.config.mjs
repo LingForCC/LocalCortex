@@ -34,7 +34,7 @@ export default tseslint.config(
       },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.mjs'],
+          allowDefaultProject: ['eslint.config.mjs', 'postcss.config.cjs'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
