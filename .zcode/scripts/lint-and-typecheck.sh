@@ -40,6 +40,10 @@ run() {
   local code
   output="$("$@" 2>&1)"
   code=$?
+  # ALL output goes to stderr. ZCode parses a Stop hook's stdout as JSON (strict
+  # schema); printing anything human-readable to stdout — even on success —
+  # makes the run fail JSON validation and the hook is recorded as failed.
+  # Empty stdout + exit code is the contract: 0 passes, 2 blocks.
   if [ "$code" -ne 0 ]; then
     echo "❌ $label failed (exit $code)" >&2
     echo "$output" >&2
@@ -47,7 +51,7 @@ run() {
     echo "--- End of $label output ---" >&2
     return 1
   fi
-  echo "✅ $label passed"
+  echo "✅ $label passed" >&2
   return 0
 }
 
