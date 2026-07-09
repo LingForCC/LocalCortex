@@ -194,10 +194,19 @@ async function bootstrap(): Promise<void> {
       // (e.g. {{parentTaskId}}). An enabled handoff fires on EVERY matching
       // event (so a multi-round session creates the reminder each round); there
       // is no fulfilled state, so nothing to mark afterwards.
-      const { event: enrichedEvent, matched: handoffMatched } = prepareHandoffEnrichment(
+      const { event: enrichedEvent, matched: handoffMatched, enrichment } = prepareHandoffEnrichment(
         event,
         handoffsRepo,
       );
+      // Log the enrichment result so the merged context (the {{key}} vars the
+      // fulfilling rule will render) is visible in the log.
+      if (enrichment) {
+        const sessionId = event.payload['sessionId'];
+        const sessionIdStr = typeof sessionId === 'string' ? sessionId : '';
+        logger.info(
+          `handoff matched: handoffId=${enrichment.handoffId} sessionId=${sessionIdStr} context=${JSON.stringify(enrichment.context)}`,
+        );
+      }
 
       for (const rule of matched) {
         enqueueRun(rule.id, 'event', enrichedEvent)

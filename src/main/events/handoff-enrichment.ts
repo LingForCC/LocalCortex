@@ -93,6 +93,8 @@ export interface PreparedEnrichment<E extends EventLike> {
   event: E;
   /** True iff an enabled handoff matched and context was merged into the event. */
   matched: boolean;
+  /** The enrichment applied (handoffId + context), or null if no handoff matched. */
+  enrichment: HandoffEnrichment | null;
 }
 
 /**
@@ -111,11 +113,12 @@ export function prepareHandoffEnrichment<E extends EventLike>(
   const enrichment = enrichEventForSession(sessionId, repo);
 
   if (!enrichment) {
-    return { event, matched: false };
+    return { event, matched: false, enrichment: null };
   }
 
   return {
     event: { ...event, payload: mergeEnrichment(event.payload, enrichment.context) },
     matched: true,
+    enrichment,
   };
 }

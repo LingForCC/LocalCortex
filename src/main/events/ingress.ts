@@ -69,9 +69,10 @@ export function buildIngress(opts: IngressOptions): FastifyInstance {
     }
     const event: IncomingEvent = parsed.data;
 
-    // Log every received event (architecture.md §8).
+    // Log every received event (architecture.md §8) — full payload so the event
+    // body is inspectable in the log, not just its key names.
     logger.info(
-      `ingress: event type=${event.type} ts=${event.timestamp} payloadKeys=${Object.keys(event.payload).join(',')}`,
+      `ingress: event type=${event.type} ts=${event.timestamp} payload=${JSON.stringify(event.payload)}`,
     );
 
     const matched = matchEventsToRules(event, opts.getRules());

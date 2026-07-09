@@ -130,10 +130,11 @@ describe('prepareHandoffEnrichment (composition)', () => {
   it('H-I1: no enabled handoff → event passes through unchanged', () => {
     const repo = makeRepo({});
     const event: Ev = { type: 'zcode.session-complete', payload: { sessionId: 'sess_unknown' } };
-    const { event: out, matched } = prepareHandoffEnrichment(event, repo);
+    const { event: out, matched, enrichment } = prepareHandoffEnrichment(event, repo);
     expect(out).toBe(event); // same reference — no enrichment
     expect(out.payload).toEqual({ sessionId: 'sess_unknown' });
     expect(matched).toBe(false);
+    expect(enrichment).toBeNull();
   });
 
   it('H-I2: enabled handoff → context merged into payload', () => {
@@ -150,10 +151,14 @@ describe('prepareHandoffEnrichment (composition)', () => {
       type: 'zcode.session-complete',
       payload: { sessionId: 'sess_a', summary: 'done' },
     };
-    const { event: out, matched } = prepareHandoffEnrichment(event, repo);
+    const { event: out, matched, enrichment } = prepareHandoffEnrichment(event, repo);
     expect(matched).toBe(true);
     expect(out.payload['parentTaskId']).toBe('o2LOz5FWVIj');
     expect(out.payload['taskManager']).toBe('omnifocus');
+    expect(enrichment).toEqual({
+      handoffId: 'h1',
+      context: { parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' },
+    });
   });
 
   it('H-I3: original payload keys preserved (merge, not replace)', () => {
