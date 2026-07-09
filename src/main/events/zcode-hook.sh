@@ -45,15 +45,23 @@ WORKDIR="${LC_WORKDIR:-${ZCODE_PROJECT_DIR:-${PWD:-}}}"
 SUMMARY="${LC_SUMMARY:-}"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# Build the JSON payload. We use a small printf + sed escaper to avoid a jq dep.
+# Build the JSON payload. We escape with bash parameter expansion (no jq dep).
+# NOTE: do not use `sed` here — the previous `sed -e ':a' -e 'N' -e '$!ba'`
+# idiom silently returns EMPTY output on macOS BSD sed when the input lacks a
+# trailing newline (printf '%s' produces none), so all fields were dropped.
 json_escape() {
-  # Escape backslash and double-quote, then newline, for a JSON string body.
-  sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
+  local s="$1"
+  s="${s//\\/\\\\}"    # backslash first
+  s="${s//\"/\\\"}"    # double quote
+  s="${s//$'\n'/\\n}"  # newline
+  s="${s//$'\r'/\\r}"  # carriage return
+  s="${s//$'\t'/\\t}"  # tab
+  printf '%s' "$s"
 }
 
-ESCAPED_SUMMARY="$(printf '%s' "${SUMMARY}" | json_escape)"
-ESCAPED_WORKDIR="$(printf '%s' "${WORKDIR}" | json_escape)"
-ESCAPED_SESSION_ID="$(printf '%s' "${SESSION_ID}" | json_escape)"
+ESCAPED_SUMMARY="$(json_escape "${SUMMARY}")"
+ESCAPED_WORKDIR="$(json_escape "${WORKDIR}")"
+ESCAPED_SESSION_ID="$(json_escape "${SESSION_ID}")"
 
 read -r -d '' PAYLOAD <<-JSON || true
 {
