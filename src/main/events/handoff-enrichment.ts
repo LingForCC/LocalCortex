@@ -4,18 +4,20 @@
  *
  * Spec: the agent-done → review-subtask flow. When a session completes, an
  * event carrying `payload.sessionId` arrives at the ingress. This module looks
- * up the pending handoff for that session and returns its opaque `context` map
+ * up the enabled handoff for that session and returns its opaque `context` map
  * to be merged into the event payload (so the fulfilling rule can render
  * `{{key}}` template variables).
  *
  * Pure logic — depends only on the HandoffsRepository interface (no `electron`
  * import), so it's unit-testable with a fake repo. Has ZERO domain knowledge
- * of any task manager: `context` is an opaque `Record<string,string>` (Level-2
+ * of any task manager: `context` is an opaque `Record<string, string>` (Level-2
  * abstraction).
  *
- * Idempotency: only `pending` handoffs match (`findPendingBySessionId` filters
- * on status), so repeated Stop events for the same session enrich at most once
- * until the handoff is fulfilled/cancelled.
+ * **Fire-on-every-match (not fire-once).** An enabled handoff matches EVERY
+ * session-complete event for its sessionId — so a multi-round coding session
+ * (each round emits a Stop event) creates the reminder each round. There is no
+ * fulfilled state and no post-run marking; the handoff stays enabled until the
+ * user disables it. Disabled handoffs never match.
  */
 
 /**
@@ -23,28 +25,31 @@
  * a one-off fake without constructing a full HandoffsRepository.
  */
 export interface HandoffLookup {
-  findPendingBySessionId(sessionId: string): { id: string; context: Record<string, string> } | null;
+  findEnabledBySessionId(sessionId: string): { id: string; context: Record<string, string> } | null;
 }
 
 /** Result of looking up enrichment for a session: the handoff id + its context. */
 export interface HandoffEnrichment {
-  /** The handoff row id (used to mark it fulfilled after the run completes). */
+  /** The handoff row id (informational — no post-run marking happens). */
   handoffId: string;
   /** Opaque context merged into the event payload; keys become {{key}} vars. */
   context: Record<string, string>;
 }
 
 /**
- * Look up the enrichment for a session, or null if there is no pending handoff
- * for it. Returns both the handoff id (so the caller can mark it fulfilled
- * after the run) and the context map (merged into the event payload).
+ * Look up the enrichment for a session, or null if there is no enabled handoff
+ * for it. Returns the handoff id (informational) and the context map (merged
+ * into the event payload).
+ *
+ * An enabled handoff matches EVERY time this is called for its sessionId —
+ * there is no fulfilled state to flip afterwards.
  */
 export function enrichEventForSession(
   sessionId: string | undefined,
   repo: HandoffLookup,
 ): HandoffEnrichment | null {
   if (!sessionId) return null;
-  const handoff = repo.findPendingBySessionId(sessionId);
+  const handoff = repo.findEnabledBySessionId(sessionId);
   if (!handoff) return null;
   return { handoffId: handoff.id, context: { ...handoff.context } };
 }
@@ -75,58 +80,42 @@ interface EventLike {
 
 /**
  * The result of preparing enrichment for an event: the (possibly enriched)
- * event to enqueue, plus a callback to run after the fulfilling run completes
- * (marks the handoff fulfilled). When there's no pending handoff, the event is
- * returned unchanged and `onFulfilled` is a no-op.
+ * event to enqueue, and whether a handoff matched. When there's no enabled
+ * handoff, the event is returned unchanged.
  *
  * This factors the inline `onMatched` wiring out of `src/main/index.ts` so the
- * composition (lookup → merge → mark-fulfilled) is unit-testable without
- * Electron. `markFulfilled` is injected so the orchestrator stays pure and
- * side-effect-free until the caller invokes `onFulfilled`.
+ * composition (lookup → merge) is unit-testable without Electron. Unlike the
+ * old model, there is no post-run callback — an enabled handoff fires every
+ * match and stays enabled.
  */
 export interface PreparedEnrichment<E extends EventLike> {
   /** The event to enqueue (enriched, or the original if no handoff matched). */
   event: E;
-  /** True iff a pending handoff matched and context was merged into the event. */
+  /** True iff an enabled handoff matched and context was merged into the event. */
   matched: boolean;
-  /** Call after the run completes to mark the handoff fulfilled. No-op if none. */
-  onFulfilled: (runId: number, ruleId?: string) => void;
 }
 
 /**
- * Compose the full enrichment path for one event: look up the pending handoff
- * by `payload.sessionId`, merge its context into the payload, and return a
- * callback that marks it fulfilled after a run.
+ * Compose the full enrichment path for one event: look up the enabled handoff
+ * by `payload.sessionId` and merge its context into the payload.
  *
- * Pure: the mark-fulfilled side effect is deferred to the returned callback and
- * performed via the injected `markFulfilled` (so tests pass a spy and the real
- * caller passes `handoffsRepo.markFulfilled`).
+ * Pure and side-effect-free: the caller enqueues the returned event, and that's
+ * it — no post-run marking. An enabled handoff will match again on the next
+ * session-complete event for the same session.
  */
 export function prepareHandoffEnrichment<E extends EventLike>(
   event: E,
   repo: HandoffLookup,
-  markFulfilled: (handoffId: string, runId: number, ruleId?: string) => boolean,
 ): PreparedEnrichment<E> {
   const sessionId = readSessionId(event.payload);
   const enrichment = enrichEventForSession(sessionId, repo);
 
   if (!enrichment) {
-    return {
-      event,
-      matched: false,
-      onFulfilled: () => {
-        /* no handoff matched — nothing to fulfill */
-      },
-    };
+    return { event, matched: false };
   }
 
-  const enrichedEvent = { ...event, payload: mergeEnrichment(event.payload, enrichment.context) };
-  const handoffId = enrichment.handoffId;
   return {
-    event: enrichedEvent,
+    event: { ...event, payload: mergeEnrichment(event.payload, enrichment.context) },
     matched: true,
-    onFulfilled: (runId, ruleId) => {
-      markFulfilled(handoffId, runId, ruleId);
-    },
   };
 }

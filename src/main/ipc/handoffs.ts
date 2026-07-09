@@ -10,7 +10,12 @@
 
 import { ipcMain } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { IPC, HandoffIdSchema, CreateHandoffMessageSchema } from '@shared/schemas/ipc-schema';
+import {
+  IPC,
+  HandoffIdSchema,
+  CreateHandoffMessageSchema,
+  SetHandoffEnabledMessageSchema,
+} from '@shared/schemas/ipc-schema';
 import type { HandoffsRepository } from '../db/repositories/handoffs.js';
 import type { Handoff } from '@shared/types';
 
@@ -30,7 +35,7 @@ export function registerHandoffsIpc(handoffsRepo: HandoffsRepository): void {
       sessionId: input.sessionId,
       context: input.context,
       reminderTitle: input.reminderTitle,
-      status: 'pending',
+      enabled: true,
       createdAt: now,
       updatedAt: now,
     };
@@ -41,5 +46,10 @@ export function registerHandoffsIpc(handoffsRepo: HandoffsRepository): void {
   ipcMain.handle(IPC.HANDOFF_DELETE, async (_evt, raw) => {
     const { id } = HandoffIdSchema.parse(raw);
     return handoffsRepo.delete(id);
+  });
+
+  ipcMain.handle(IPC.HANDOFF_SET_ENABLED, async (_evt, raw) => {
+    const { id, enabled } = SetHandoffEnabledMessageSchema.parse(raw);
+    return handoffsRepo.setEnabled(id, enabled);
   });
 }

@@ -32,6 +32,7 @@ export const IPC = {
   HANDOFF_GET: 'handoffs:get',
   HANDOFF_CREATE: 'handoffs:create',
   HANDOFF_DELETE: 'handoffs:delete',
+  HANDOFF_SET_ENABLED: 'handoffs:setEnabled',
 
   SERVERS_LIST: 'servers:list',
   SERVERS_READ: 'servers:read',
@@ -78,6 +79,12 @@ export const HandoffIdSchema = z.object({ id: z.string().min(1) });
 
 /** `handoffs:create` payload. `CreateHandoffSchema` carries sessionId/context. */
 export const CreateHandoffMessageSchema = CreateHandoffSchema;
+
+/** `handoffs:setEnabled` payload. */
+export const SetHandoffEnabledMessageSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
+});
 
 // --- Settings ---------------------------------------------------------------
 

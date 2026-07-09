@@ -1,9 +1,9 @@
 # Handoffs (agent-done → review subtask)
 
-A **handoff** lets you register a reminder that fires when an in-flight agent
-session completes. The typical flow: you hand a long-running ZCode / Codex /
-Claude session off to work on a task manager item (an OmniFocus task, a Todoist
-task, …), and when that session ends LocalCortex automatically runs a rule that
+A **handoff** lets you register a reminder that fires when an agent session
+completes. The typical flow: you hand a long-running ZCode / Codex / Claude
+session off to work on a task manager item (an OmniFocus task, a Todoist task,
+…), and when that session ends LocalCortex automatically runs a rule that
 creates a **review subtask** under the original item — so you're reminded to
 review the agent's work later without watching the session.
 
@@ -13,22 +13,30 @@ review the agent's work later without watching the session.
 > task manager or agent source needs no code change — only rule text and (for a
 > new agent source) a hook script.
 
+> **Enable/disable, not fire-once.** A handoff has an `enabled` toggle, not a
+> fulfilled/pending lifecycle. When enabled, it fires on **every** matching
+> session-complete event — so a multi-round coding session (where the Stop hook
+> fires once per round) creates the reminder each round. Disabling stops it from
+> firing; there is no "fulfilled" state and no run-id tracking.
+
 ---
 
 ## The flow
 
 1. **Register** a handoff (Handoffs panel): enter the agent **session id** and a
-   set of **context** key-values (e.g. `parentTaskId=o2LOz5FWVIj`).
+   set of **context** key-values (e.g. `parentTaskId=o2LOz5FWVIj`). The handoff
+   starts **enabled**.
 2. The agent runs; you continue with other work.
-3. The session completes → a source-specific **Stop hook** POSTs a
-   `<source>.session-complete` event to the ingress with `payload.sessionId`.
-4. LocalCortex **correlates** the session id to your handoff and **merges** its
-   context into the event payload.
+3. The session completes (or a round ends) → a source-specific **Stop hook**
+   POSTs a `<source>.session-complete` event to the ingress with
+   `payload.sessionId`.
+4. LocalCortex **correlates** the session id to your handoff and, if it's
+   enabled, **merges** its context into the event payload.
 5. An event-triggered **rule** matches that event type, runs an agent with your
    task manager's MCP server, renders `{{parentTaskId}}` (etc.) into its prompt,
    and creates the review subtask.
-6. LocalCortex **marks the handoff fulfilled** (recording the run id) so it
-   won't fire again — even if the Stop hook fires repeatedly.
+6. The handoff stays enabled — the next round's Stop event fires it again. Toggle
+   it off in the panel when you no longer want reminders for that session.
 
 ---
 
@@ -68,9 +76,10 @@ shipped bridge in your workspace `.zcode/config.json`:
 This fires a `zcode.session-complete` event.
 
 > **Note on `Stop`:** ZCode has no dedicated "session closed" event; `Stop`
-> fires when an agent turn ends. The handoff correlation is idempotent (only
-> `pending` handoffs match, and they're marked `fulfilled` after one run), so a
-> repeated `Stop` for the same session enriches at most once.
+> fires when an agent turn ends. Because a handoff fires on every match while
+> enabled (not fire-once), each `Stop` for the session creates a new reminder —
+> which is the intent for multi-round sessions. Disable the handoff when you no
+> longer want reminders for that session.
 
 ### Codex / Claude Code
 
@@ -182,7 +191,7 @@ under the name `omnifocus`, then:
 The prompt builder (`src/main/agent/prompt-builder.ts`) renders `{{var}}` from
 the event payload. The handoff enrichment (`src/main/events/handoff-enrichment.ts`)
 is the only place correlation happens: it looks up the handoff by
-`payload.sessionId`, and if `pending`, merges its `context` into the payload
+`payload.sessionId`, and if enabled, merges its `context` into the payload
 before the run is enqueued. From there the existing template-render path carries
 the variables into the rule's prompt — **no prompt-builder changes were needed**
 to support handoffs.

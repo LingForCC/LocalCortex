@@ -188,21 +188,22 @@ async function bootstrap(): Promise<void> {
     port: 4729,
     getRules: () => rulesRepo.list().filter((r) => r.enabled),
     onMatched: async (event, matched) => {
-      // Handoff enrichment: if this event carries a sessionId with a pending
+      // Handoff enrichment: if this event carries a sessionId with an enabled
       // handoff registered, merge that handoff's opaque context into the event
       // payload so the fulfilling rule can render {{key}} template variables
-      // (e.g. {{parentTaskId}}). Idempotent: only pending handoffs match, and
-      // the handoff is marked fulfilled after the first run completes.
-      const { event: enrichedEvent, matched: handoffMatched, onFulfilled } =
-        prepareHandoffEnrichment(event, handoffsRepo, handoffsRepo.markFulfilled.bind(handoffsRepo));
+      // (e.g. {{parentTaskId}}). An enabled handoff fires on EVERY matching
+      // event (so a multi-round session creates the reminder each round); there
+      // is no fulfilled state, so nothing to mark afterwards.
+      const { event: enrichedEvent, matched: handoffMatched } = prepareHandoffEnrichment(
+        event,
+        handoffsRepo,
+      );
 
       for (const rule of matched) {
         enqueueRun(rule.id, 'event', enrichedEvent)
           .then((runId) => {
-            // Mark the handoff fulfilled (no-op if none matched).
             if (handoffMatched) {
-              onFulfilled(runId, rule.id);
-              logger.info(`handoff fulfilled by run #${runId} (rule=${rule.id})`);
+              logger.info(`handoff enriched run #${runId} (rule=${rule.id})`);
             }
           })
           .catch((e) => logError(`event run failed for ${rule.id}`, e));

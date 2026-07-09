@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   enrichEventForSession,
   mergeEnrichment,
@@ -6,21 +6,24 @@ import {
   type HandoffLookup,
 } from './handoff-enrichment.js';
 
-/** Build a fake repo backed by an in-memory map of sessionId → handoff. */
+/**
+ * Build a fake repo backed by an in-memory map of sessionId → handoff.
+ * `enabled` controls whether the handoff matches findEnabledBySessionId.
+ */
 function makeRepo(
-  store: Record<string, Array<{ id: string; context: Record<string, string>; status: string }>>,
-): HandoffLookup & { mark: (sessionId: string, status: string) => void } {
+  store: Record<string, Array<{ id: string; context: Record<string, string>; enabled: boolean }>>,
+): HandoffLookup & { setEnabled: (sessionId: string, enabled: boolean) => void } {
   return {
-    findPendingBySessionId(sessionId: string) {
+    findEnabledBySessionId(sessionId: string) {
       const rows = store[sessionId];
       if (!rows) return null;
-      const pending = rows.find((r) => r.status === 'pending');
-      if (!pending) return null;
-      return { id: pending.id, context: pending.context };
+      const enabled = rows.find((r) => r.enabled);
+      if (!enabled) return null;
+      return { id: enabled.id, context: enabled.context };
     },
-    mark(sessionId: string, status: string) {
+    setEnabled(sessionId: string, enabled: boolean) {
       const rows = store[sessionId];
-      if (rows && rows[0]) rows[0].status = status;
+      if (rows && rows[0]) rows[0].enabled = enabled;
     },
   };
 }
@@ -38,18 +41,18 @@ describe('enrichEventForSession', () => {
 
   it('returns null when no handoff exists for the session', () => {
     const repo = makeRepo({
-      sess_other: [{ id: 'h1', context: { parentTaskId: 'x' }, status: 'pending' }],
+      sess_other: [{ id: 'h1', context: { parentTaskId: 'x' }, enabled: true }],
     });
     expect(enrichEventForSession('sess_unknown', repo)).toBeNull();
   });
 
-  it('returns the context + handoffId for a pending handoff', () => {
+  it('returns the context + handoffId for an enabled handoff', () => {
     const repo = makeRepo({
       sess_a: [
         {
           id: 'h1',
           context: { parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' },
-          status: 'pending',
+          enabled: true,
         },
       ],
     });
@@ -60,33 +63,32 @@ describe('enrichEventForSession', () => {
     });
   });
 
-  it('returns null for a fulfilled handoff (idempotent — does not re-fire)', () => {
+  it('returns null for a disabled handoff', () => {
     const repo = makeRepo({
-      sess_b: [{ id: 'h2', context: { parentTaskId: 'x' }, status: 'fulfilled' }],
+      sess_b: [{ id: 'h2', context: { parentTaskId: 'x' }, enabled: false }],
     });
     expect(enrichEventForSession('sess_b', repo)).toBeNull();
   });
 
-  it('returns null for a cancelled handoff', () => {
+  it('fires again after re-enabling (no fulfilled state)', () => {
     const repo = makeRepo({
-      sess_c: [{ id: 'h3', context: { parentTaskId: 'x' }, status: 'cancelled' }],
+      sess_c: [{ id: 'h3', context: { parentTaskId: 'x' }, enabled: true }],
     });
+    // First event: matches.
+    expect(enrichEventForSession('sess_c', repo)).not.toBeNull();
+    // A second event for the same session still matches (fire-on-every-match).
+    expect(enrichEventForSession('sess_c', repo)).not.toBeNull();
+    // Disable → no match.
+    repo.setEnabled('sess_c', false);
     expect(enrichEventForSession('sess_c', repo)).toBeNull();
-  });
-
-  it('does not re-fire after the handoff is marked fulfilled', () => {
-    const repo = makeRepo({
-      sess_d: [{ id: 'h4', context: { parentTaskId: 'x' }, status: 'pending' }],
-    });
-    expect(enrichEventForSession('sess_d', repo)).not.toBeNull();
-    // Simulate the run completing and marking the handoff fulfilled.
-    repo.mark('sess_d', 'fulfilled');
-    expect(enrichEventForSession('sess_d', repo)).toBeNull();
+    // Re-enable → matches again.
+    repo.setEnabled('sess_c', true);
+    expect(enrichEventForSession('sess_c', repo)).not.toBeNull();
   });
 
   it('returns a copy of the context (not the stored reference)', () => {
     const repo = makeRepo({
-      sess_e: [{ id: 'h5', context: { parentTaskId: 'x' }, status: 'pending' }],
+      sess_e: [{ id: 'h5', context: { parentTaskId: 'x' }, enabled: true }],
     });
     const result = enrichEventForSession('sess_e', repo);
     expect(result).not.toBeNull();
@@ -122,38 +124,25 @@ describe('mergeEnrichment', () => {
 });
 
 describe('prepareHandoffEnrichment (composition)', () => {
-  // The orchestrator takes an event, a lookup repo, and a markFulfilled spy.
-  function setup(store: Parameters<typeof makeRepo>[0]) {
-    const repo = makeRepo(store);
-    const markFulfilled = vi.fn<(id: string, runId: number, ruleId?: string) => boolean>();
-    return { repo, markFulfilled };
-  }
-
   /** An event with an open payload map (so enrichment keys are addressable). */
   type Ev = { type: string; payload: Record<string, unknown> };
 
-  it('H-I1: no pending handoff → event passes through unchanged, no fulfillment', () => {
-    const { repo, markFulfilled } = setup({});
+  it('H-I1: no enabled handoff → event passes through unchanged', () => {
+    const repo = makeRepo({});
     const event: Ev = { type: 'zcode.session-complete', payload: { sessionId: 'sess_unknown' } };
-    const { event: out, matched, onFulfilled } = prepareHandoffEnrichment(
-      event,
-      repo,
-      markFulfilled,
-    );
+    const { event: out, matched } = prepareHandoffEnrichment(event, repo);
     expect(out).toBe(event); // same reference — no enrichment
     expect(out.payload).toEqual({ sessionId: 'sess_unknown' });
     expect(matched).toBe(false);
-    onFulfilled(1, 'rule-1');
-    expect(markFulfilled).not.toHaveBeenCalled();
   });
 
-  it('H-I2: pending handoff → context merged into payload', () => {
-    const { repo, markFulfilled } = setup({
+  it('H-I2: enabled handoff → context merged into payload', () => {
+    const repo = makeRepo({
       sess_a: [
         {
           id: 'h1',
           context: { parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' },
-          status: 'pending',
+          enabled: true,
         },
       ],
     });
@@ -161,78 +150,73 @@ describe('prepareHandoffEnrichment (composition)', () => {
       type: 'zcode.session-complete',
       payload: { sessionId: 'sess_a', summary: 'done' },
     };
-    const { event: out, matched } = prepareHandoffEnrichment(event, repo, markFulfilled);
+    const { event: out, matched } = prepareHandoffEnrichment(event, repo);
     expect(matched).toBe(true);
     expect(out.payload['parentTaskId']).toBe('o2LOz5FWVIj');
     expect(out.payload['taskManager']).toBe('omnifocus');
   });
 
   it('H-I3: original payload keys preserved (merge, not replace)', () => {
-    const { repo, markFulfilled } = setup({
-      sess_b: [{ id: 'h2', context: { parentTaskId: 'x' }, status: 'pending' }],
+    const repo = makeRepo({
+      sess_b: [{ id: 'h2', context: { parentTaskId: 'x' }, enabled: true }],
     });
     const event: Ev = {
       type: 'zcode.session-complete',
       payload: { sessionId: 'sess_b', workdir: '/repo', summary: 'shipped' },
     };
-    const { event: out } = prepareHandoffEnrichment(event, repo, markFulfilled);
+    const { event: out } = prepareHandoffEnrichment(event, repo);
     expect(out.payload['workdir']).toBe('/repo');
     expect(out.payload['summary']).toBe('shipped');
     expect(out.payload['parentTaskId']).toBe('x');
   });
 
   it('H-I4: enrichment overrides a colliding payload key (context wins)', () => {
-    const { repo, markFulfilled } = setup({
-      sess_c: [{ id: 'h3', context: { parentTaskId: 'NEW' }, status: 'pending' }],
+    const repo = makeRepo({
+      sess_c: [{ id: 'h3', context: { parentTaskId: 'NEW' }, enabled: true }],
     });
     const event: Ev = { type: 'ev', payload: { sessionId: 'sess_c', parentTaskId: 'OLD' } };
-    const { event: out } = prepareHandoffEnrichment(event, repo, markFulfilled);
+    const { event: out } = prepareHandoffEnrichment(event, repo);
     expect(out.payload['parentTaskId']).toBe('NEW');
   });
 
-  it('H-I5: onFulfilled marks the handoff with the run id + rule id', () => {
-    const { repo, markFulfilled } = setup({
-      sess_d: [{ id: 'h4', context: { parentTaskId: 'x' }, status: 'pending' }],
+  it('H-I5: fires on every call (no fulfilled state) — repeated matches all enrich', () => {
+    const repo = makeRepo({
+      sess_d: [{ id: 'h4', context: { parentTaskId: 'x' }, enabled: true }],
     });
-    const event = { type: 'ev', payload: { sessionId: 'sess_d' } };
-    const { onFulfilled } = prepareHandoffEnrichment(event, repo, markFulfilled);
-    onFulfilled(42, 'rule-x');
-    expect(markFulfilled).toHaveBeenCalledWith('h4', 42, 'rule-x');
+    const event: Ev = { type: 'ev', payload: { sessionId: 'sess_d' } };
+    // Three separate events for the same session — each must enrich.
+    for (let i = 0; i < 3; i++) {
+      const { matched } = prepareHandoffEnrichment(event, repo);
+      expect(matched).toBe(true);
+    }
   });
 
-  it('H-I5b: ruleId omitted from onFulfilled → markFulfilled called without it', () => {
-    const { repo, markFulfilled } = setup({
-      sess_e: [{ id: 'h5', context: { parentTaskId: 'x' }, status: 'pending' }],
+  it('H-I6: disabled handoff → no enrichment', () => {
+    const repo = makeRepo({
+      sess_e: [{ id: 'h5', context: { parentTaskId: 'x' }, enabled: false }],
     });
-    const event = { type: 'ev', payload: { sessionId: 'sess_e' } };
-    const { onFulfilled } = prepareHandoffEnrichment(event, repo, markFulfilled);
-    onFulfilled(7);
-    expect(markFulfilled).toHaveBeenCalledWith('h5', 7, undefined);
-  });
-
-  it('H-I6: event without sessionId → no enrichment, no fulfillment', () => {
-    const { repo, markFulfilled } = setup({
-      sess_f: [{ id: 'h6', context: { parentTaskId: 'x' }, status: 'pending' }],
-    });
-    const event: Ev = { type: 'ev', payload: { summary: 'no session here' } };
-    const { event: out, matched, onFulfilled } = prepareHandoffEnrichment(
-      event,
-      repo,
-      markFulfilled,
-    );
+    const event: Ev = { type: 'ev', payload: { sessionId: 'sess_e' } };
+    const { event: out, matched } = prepareHandoffEnrichment(event, repo);
     expect(matched).toBe(false);
     expect(out).toBe(event);
     expect(out.payload['parentTaskId']).toBeUndefined();
-    onFulfilled(1);
-    expect(markFulfilled).not.toHaveBeenCalled();
   });
 
-  it('H-I6b: non-string sessionId (e.g. number) → treated as no session id', () => {
-    const { repo, markFulfilled } = setup({
-      sess_g: [{ id: 'h7', context: { parentTaskId: 'x' }, status: 'pending' }],
+  it('H-I6b: event without sessionId → no enrichment', () => {
+    const repo = makeRepo({
+      sess_f: [{ id: 'h6', context: { parentTaskId: 'x' }, enabled: true }],
     });
-    const event = { type: 'ev', payload: { sessionId: 12345 } };
-    const { matched } = prepareHandoffEnrichment(event, repo, markFulfilled);
+    const event: Ev = { type: 'ev', payload: { summary: 'no session here' } };
+    const { matched } = prepareHandoffEnrichment(event, repo);
+    expect(matched).toBe(false);
+  });
+
+  it('H-I6c: non-string sessionId (e.g. number) → treated as no session id', () => {
+    const repo = makeRepo({
+      sess_g: [{ id: 'h7', context: { parentTaskId: 'x' }, enabled: true }],
+    });
+    const event: Ev = { type: 'ev', payload: { sessionId: 12345 } };
+    const { matched } = prepareHandoffEnrichment(event, repo);
     expect(matched).toBe(false);
   });
 });

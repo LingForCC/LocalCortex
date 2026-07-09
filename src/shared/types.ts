@@ -98,7 +98,6 @@ export type RunStatus = 'success' | 'error';
 
 /** A registered agent-session handoff (pending_reviews row). */
 export type Handoff = z.infer<typeof HandoffSchema>;
-export type HandoffStatus = Handoff['status'];
 
 // --- Global settings (architecture.md §6.4, §6.5) --------------------------
 

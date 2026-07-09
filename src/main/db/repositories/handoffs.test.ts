@@ -20,7 +20,7 @@ function makeHandover(overrides: Partial<Handoff> = {}): Handoff {
     sessionId: 'sess_abc',
     context: { parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' },
     reminderTitle: undefined,
-    status: 'pending',
+    enabled: true,
     createdAt: '2026-07-08T00:00:00Z',
     updatedAt: '2026-07-08T00:00:00Z',
     ...overrides,
@@ -34,7 +34,7 @@ describe('HandoffsRepository', () => {
     expect(got).not.toBeNull();
     expect(got!.sessionId).toBe('sess_abc');
     expect(got!.context).toEqual({ parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' });
-    expect(got!.status).toBe('pending');
+    expect(got!.enabled).toBe(true);
   });
 
   it('lists handoffs newest-first', () => {
@@ -44,51 +44,37 @@ describe('HandoffsRepository', () => {
     expect(list.map((h) => h.id)).toEqual(['new', 'old']);
   });
 
-  it('findPendingBySessionId returns only pending handoffs', () => {
-    repo.create(makeHandover({ id: 'h1', sessionId: 'sess_x', status: 'pending' }));
-    repo.create(makeHandover({ id: 'h2', sessionId: 'sess_y', status: 'fulfilled' }));
-    expect(repo.findPendingBySessionId('sess_x')?.id).toBe('h1');
-    expect(repo.findPendingBySessionId('sess_y')).toBeNull();
-    expect(repo.findPendingBySessionId('sess_unknown')).toBeNull();
+  it('findEnabledBySessionId returns only enabled handoffs', () => {
+    repo.create(makeHandover({ id: 'h1', sessionId: 'sess_x', enabled: true }));
+    repo.create(makeHandover({ id: 'h2', sessionId: 'sess_y', enabled: false }));
+    expect(repo.findEnabledBySessionId('sess_x')?.id).toBe('h1');
+    expect(repo.findEnabledBySessionId('sess_y')).toBeNull();
+    expect(repo.findEnabledBySessionId('sess_unknown')).toBeNull();
   });
 
-  it('findPendingBySessionId returns the most recent when several exist', () => {
+  it('findEnabledBySessionId returns the most recent when several exist', () => {
     repo.create(
       makeHandover({ id: 'old', sessionId: 'sess_x', createdAt: '2026-07-01T00:00:00Z' }),
     );
     repo.create(
       makeHandover({ id: 'new', sessionId: 'sess_x', createdAt: '2026-07-09T00:00:00Z' }),
     );
-    expect(repo.findPendingBySessionId('sess_x')?.id).toBe('new');
+    expect(repo.findEnabledBySessionId('sess_x')?.id).toBe('new');
   });
 
-  it('markFulfilled sets status, run id, and rule id', () => {
-    repo.create(makeHandover({ id: 'h1' }));
-    const ok = repo.markFulfilled('h1', 42, 'rule-1');
-    expect(ok).toBe(true);
-    const got = repo.get('h1');
-    expect(got!.status).toBe('fulfilled');
-    expect(got!.fulfilledRunId).toBe(42);
-    expect(got!.ruleId).toBe('rule-1');
+  it('setEnabled flips the flag and persists', () => {
+    repo.create(makeHandover({ id: 'h1', enabled: true }));
+    expect(repo.setEnabled('h1', false)).toBe(true);
+    expect(repo.get('h1')?.enabled).toBe(false);
+    // A disabled handoff no longer matches findEnabled.
+    expect(repo.findEnabledBySessionId('sess_abc')).toBeNull();
+    // Re-enabling makes it match again.
+    repo.setEnabled('h1', true);
+    expect(repo.findEnabledBySessionId('sess_abc')?.id).toBe('h1');
   });
 
-  it('markFulfilled is idempotent-safe: a fulfilled handoff no longer matches findPending', () => {
-    repo.create(makeHandover({ id: 'h1', sessionId: 'sess_x' }));
-    repo.markFulfilled('h1', 1);
-    expect(repo.findPendingBySessionId('sess_x')).toBeNull();
-  });
-
-  it('markFulfilled without a ruleId preserves an existing ruleId', () => {
-    repo.create(makeHandover({ id: 'h1', ruleId: 'pre-existing' }));
-    repo.markFulfilled('h1', 5);
-    expect(repo.get('h1')?.ruleId).toBe('pre-existing');
-  });
-
-  it('cancel sets status to cancelled', () => {
-    repo.create(makeHandover({ id: 'h1' }));
-    expect(repo.cancel('h1')).toBe(true);
-    expect(repo.get('h1')?.status).toBe('cancelled');
-    expect(repo.findPendingBySessionId('sess_abc')).toBeNull();
+  it('setEnabled on a missing id returns false', () => {
+    expect(repo.setEnabled('nope', true)).toBe(false);
   });
 
   it('delete removes a handoff', () => {
@@ -98,11 +84,21 @@ describe('HandoffsRepository', () => {
     expect(repo.delete('h1')).toBe(false);
   });
 
-  it('validates the row shape on read (rejects a bad status via parse)', () => {
-    // Insert a row with an invalid status directly via SQL to bypass repo validation.
+  it('normalizes a non-0/1 enabled integer to false (defensive read)', () => {
+    // Insert a row with enabled=7 directly via SQL (bypasses repo validation).
+    // rowToHandoff does `enabled === 1`, so any non-1 value becomes false.
     db.prepare(
-      `INSERT INTO pending_reviews (id, session_id, context_json, status) VALUES (?, ?, ?, ?)`,
-    ).run('bad', 's', '{}', 'bogus');
+      `INSERT INTO pending_reviews (id, session_id, context_json, enabled) VALUES (?, ?, ?, ?)`,
+    ).run('bad', 's', '{}', 7);
+    const got = repo.get('bad');
+    expect(got).not.toBeNull();
+    expect(got!.enabled).toBe(false);
+  });
+
+  it('throws on read when context_json is invalid (schema parse fails)', () => {
+    db.prepare(
+      `INSERT INTO pending_reviews (id, session_id, context_json, enabled) VALUES (?, ?, ?, ?)`,
+    ).run('bad', 's', '{not json', 1);
     expect(() => repo.get('bad')).toThrow();
   });
 });

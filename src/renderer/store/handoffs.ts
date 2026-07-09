@@ -18,6 +18,7 @@ interface HandoffsState {
   load: () => Promise<void>;
   create: (input: CreateHandoff) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  setEnabled: (id: string, enabled: boolean) => Promise<void>;
 }
 
 export const useHandoffsStore = create<HandoffsState>((set) => ({
@@ -43,5 +44,12 @@ export const useHandoffsStore = create<HandoffsState>((set) => ({
   remove: async (id) => {
     await window.api.handoffs.delete(id);
     set((s) => ({ handoffs: s.handoffs.filter((h) => h.id !== id) }));
+  },
+
+  setEnabled: async (id, enabled) => {
+    await window.api.handoffs.setEnabled(id, enabled);
+    set((s) => ({
+      handoffs: s.handoffs.map((h) => (h.id === id ? { ...h, enabled } : h)),
+    }));
   },
 }));

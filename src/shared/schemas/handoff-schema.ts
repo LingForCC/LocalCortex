@@ -1,12 +1,11 @@
 /**
  * Zod schema for a `pending_reviews` table row — a "handoff".
  *
- * A handoff correlates an in-flight agent session id with a set of free-form
- * context key-values. When the session completes (an event carrying that
- * sessionId hits the ingress), LocalCortex merges the context into the event
- * payload so an event-triggered rule can render `{{key}}` template variables
- * (e.g. `{{parentTaskId}}`) into its prompt and act (e.g. create a review
- * subtask).
+ * A handoff correlates an agent session id with a set of free-form context
+ * key-values. When a session-complete event carrying that sessionId hits the
+ * ingress, LocalCortex merges the context into the event payload so an
+ * event-triggered rule can render `{{key}}` template variables (e.g.
+ * `{{parentTaskId}}`) into its prompt and act (e.g. create a review subtask).
  *
  * The `context` map is deliberately opaque: LocalCortex has NO domain knowledge
  * of any task manager (OmniFocus, Todoist, Linear, …). It is a dumb pipe that
@@ -17,12 +16,15 @@
  * free: each source is just a different completion event type + hook script;
  * `sessionId` is an opaque string the hook normalizes from whatever env var
  * the source exposes.
+ *
+ * **Enable/disable model (not fire-once).** A handoff has an `enabled` flag,
+ * not a fulfilled/pending lifecycle. When enabled, it fires on EVERY matching
+ * session-complete event — so a multi-round coding session (where the Stop hook
+ * fires once per round) creates the reminder each round. Disabling stops it
+ * from firing; there is no "fulfilled" state and no run-id tracking.
  */
 
 import { z } from 'zod';
-
-/** Lifecycle of a handoff. */
-export const HandoffStatusSchema = z.enum(['pending', 'fulfilled', 'cancelled']);
 
 /**
  * The full handoff row (mirrors the `pending_reviews` table).
@@ -35,7 +37,8 @@ export const HandoffSchema = z.object({
   id: z.string().min(1),
   /**
    * The agent session id this handoff watches (opaque). When an event whose
-   * `payload.sessionId` equals this value arrives, the handoff fires.
+   * `payload.sessionId` equals this value arrives, the handoff fires (if
+   * enabled).
    */
   sessionId: z.string().min(1),
   /**
@@ -46,19 +49,20 @@ export const HandoffSchema = z.object({
   context: z.record(z.string(), z.string()).default({}),
   /** Optional human-readable label for the reminder (purely informational). */
   reminderTitle: z.string().optional(),
-  /** Lifecycle state. Only `pending` handoffs fire. */
-  status: HandoffStatusSchema,
-  /** The id of the rule that fulfilled this handoff, once it has (informational). */
-  ruleId: z.string().optional(),
-  /** The runs.id that fulfilled this handoff, once it has (informational). */
-  fulfilledRunId: z.number().int().positive().optional(),
+  /**
+   * Whether this handoff is active. When true, it fires on EVERY matching
+   * session-complete event (including repeated Stop events across multiple
+   * rounds of a session). When false, it never fires. There is no
+   * "fulfilled" state — toggling enabled is the only control.
+   */
+  enabled: z.boolean(),
   /** ISO timestamp the handoff was registered. */
   createdAt: z.string(),
   /** ISO timestamp of the last update. */
   updatedAt: z.string(),
 });
 
-/** Shape accepted when creating a handoff (id/status/timestamps inferred). */
+/** Shape accepted when creating a handoff (id/enabled/timestamps inferred). */
 export const CreateHandoffSchema = z.object({
   sessionId: z.string().trim().min(1),
   context: z.record(z.string(), z.string()).default({}),

@@ -39,6 +39,8 @@ const api = {
     create: (input: CreateHandoff): Promise<Handoff | null> =>
       ipcRenderer.invoke(IPC.HANDOFF_CREATE, input),
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.HANDOFF_DELETE, { id }),
+    setEnabled: (id: string, enabled: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.HANDOFF_SET_ENABLED, { id, enabled }),
   },
   servers: {
     list: (): Promise<{ names: string[]; placeholders: string[] }> =>

@@ -20,27 +20,22 @@ interface HandoffRow {
   session_id: string;
   context_json: string;
   reminder_title: string | null;
-  status: string;
-  rule_id: string | null;
-  fulfilled_run_id: number | null;
+  enabled: number;
   created_at: string;
   updated_at: string;
 }
 
 /** Convert a raw DB row into a validated Handoff. */
 export function rowToHandoff(row: HandoffRow): Handoff {
-  const parsed = HandoffSchema.parse({
+  return HandoffSchema.parse({
     id: row.id,
     sessionId: row.session_id,
     context: JSON.parse(row.context_json) as Record<string, string>,
     reminderTitle: row.reminder_title ?? undefined,
-    status: row.status as Handoff['status'],
-    ruleId: row.rule_id ?? undefined,
-    fulfilledRunId: row.fulfilled_run_id ?? undefined,
+    enabled: row.enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
-  return parsed;
 }
 
 export class HandoffsRepository {
@@ -50,8 +45,7 @@ export class HandoffsRepository {
   list(): Handoff[] {
     const rows = this.db
       .prepare(
-        `SELECT id, session_id, context_json, reminder_title, status, rule_id,
-                fulfilled_run_id, created_at, updated_at
+        `SELECT id, session_id, context_json, reminder_title, enabled, created_at, updated_at
          FROM pending_reviews ORDER BY created_at DESC`,
       )
       .all() as unknown as HandoffRow[];
@@ -62,8 +56,7 @@ export class HandoffsRepository {
   get(id: string): Handoff | null {
     const row = this.db
       .prepare(
-        `SELECT id, session_id, context_json, reminder_title, status, rule_id,
-                fulfilled_run_id, created_at, updated_at
+        `SELECT id, session_id, context_json, reminder_title, enabled, created_at, updated_at
          FROM pending_reviews WHERE id = ?`,
       )
       .get(id) as HandoffRow | undefined;
@@ -71,20 +64,23 @@ export class HandoffsRepository {
   }
 
   /**
-   * The most recent pending handoff for a given sessionId, or null.
+   * The most recent enabled handoff for a given sessionId, or null.
    *
    * This is the completion-time correlation key: when a session-complete event
    * arrives, the ingress looks up the handoff by `payload.sessionId` here.
-   * Only `pending` handoffs match (fulfilled/cancelled ones are inert), which
-   * makes enrichment idempotent even if a Stop hook fires repeatedly.
+   * Only enabled handoffs match; a disabled handoff never fires.
+   *
+   * Unlike the old pending/fulfilled model, an enabled handoff matches EVERY
+   * time — so repeated Stop events (one per conversation round) each fire. The
+   * caller does not mark the handoff "done" afterwards; it stays enabled until
+   * the user disables it.
    */
-  findPendingBySessionId(sessionId: string): Handoff | null {
+  findEnabledBySessionId(sessionId: string): Handoff | null {
     const row = this.db
       .prepare(
-        `SELECT id, session_id, context_json, reminder_title, status, rule_id,
-                fulfilled_run_id, created_at, updated_at
+        `SELECT id, session_id, context_json, reminder_title, enabled, created_at, updated_at
          FROM pending_reviews
-         WHERE session_id = ? AND status = 'pending'
+         WHERE session_id = ? AND enabled = 1
          ORDER BY created_at DESC LIMIT 1`,
       )
       .get(sessionId) as HandoffRow | undefined;
@@ -97,18 +93,15 @@ export class HandoffsRepository {
     this.db
       .prepare(
         `INSERT INTO pending_reviews (id, session_id, context_json, reminder_title,
-                                      status, rule_id, fulfilled_run_id,
-                                      created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                      enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         parsed.id,
         parsed.sessionId,
         JSON.stringify(parsed.context),
         parsed.reminderTitle ?? null,
-        parsed.status,
-        parsed.ruleId ?? null,
-        parsed.fulfilledRunId ?? null,
+        parsed.enabled ? 1 : 0,
         parsed.createdAt,
         parsed.updatedAt,
       );
@@ -121,30 +114,19 @@ export class HandoffsRepository {
   }
 
   /**
-   * Mark a handoff fulfilled by the given run. Records which run fulfilled it
-   * and flips status so it won't fire again (idempotency guard). Optionally
-   * records the rule that ran. Returns true if a row was updated.
+   * Enable or disable a handoff. Returns true if a row was updated.
+   *
+   * This is the only control over whether a handoff fires: enabled = fires on
+   * every matching session-complete event; disabled = never fires. There is no
+   * "fulfilled" state and no run-id tracking.
    */
-  markFulfilled(id: string, runId: number, ruleId?: string): boolean {
+  setEnabled(id: string, enabled: boolean): boolean {
     const res = this.db
       .prepare(
-        `UPDATE pending_reviews
-         SET status = 'fulfilled', fulfilled_run_id = ?, rule_id = COALESCE(?, rule_id),
-             updated_at = datetime('now')
+        `UPDATE pending_reviews SET enabled = ?, updated_at = datetime('now')
          WHERE id = ?`,
       )
-      .run(runId, ruleId ?? null, id);
-    return res.changes > 0;
-  }
-
-  /** Cancel a handoff (it will no longer fire). Returns true if a row was updated. */
-  cancel(id: string): boolean {
-    const res = this.db
-      .prepare(
-        `UPDATE pending_reviews SET status = 'cancelled', updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .run(id);
+      .run(enabled ? 1 : 0, id);
     return res.changes > 0;
   }
 }

@@ -9,14 +9,19 @@
  * registers whatever keys their fulfilling rule's prompt renders, e.g.
  * `{ parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' }`. LocalCortex has
  * no domain knowledge of any task manager.
+ *
+ * A handoff is enabled/disabled (not fulfilled/pending). When enabled it fires
+ * on EVERY matching session-complete event — so a multi-round coding session
+ * (each round emits a Stop event) creates the reminder each round. Disabling
+ * stops it from firing.
  */
 
 import * as React from 'react';
-import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
+import { Switch } from '@renderer/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -26,7 +31,6 @@ import {
   TableRow,
 } from '@renderer/components/ui/table';
 import { useHandoffsStore } from '@renderer/store/handoffs';
-import type { HandoffStatus } from '@shared/types';
 
 /** A mutable context row in the registration form. */
 interface ContextRow {
@@ -34,23 +38,12 @@ interface ContextRow {
   value: string;
 }
 
-/** Badge variant for a handoff status. */
-function statusVariant(status: HandoffStatus): 'warning' | 'success' | 'secondary' {
-  switch (status) {
-    case 'pending':
-      return 'warning';
-    case 'fulfilled':
-      return 'success';
-    case 'cancelled':
-      return 'secondary';
-  }
-}
-
 export function Handoffs() {
   const handoffs = useHandoffsStore((s) => s.handoffs);
   const load = useHandoffsStore((s) => s.load);
   const create = useHandoffsStore((s) => s.create);
   const remove = useHandoffsStore((s) => s.remove);
+  const setEnabled = useHandoffsStore((s) => s.setEnabled);
 
   // Registration form state.
   const [sessionId, setSessionId] = React.useState('');
@@ -191,7 +184,7 @@ export function Handoffs() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Status</TableHead>
+                <TableHead>Enabled</TableHead>
                 <TableHead>Session</TableHead>
                 <TableHead>Context</TableHead>
                 <TableHead>Reminder</TableHead>
@@ -209,7 +202,11 @@ export function Handoffs() {
               {handoffs.map((h) => (
                 <TableRow key={h.id}>
                   <TableCell>
-                    <Badge variant={statusVariant(h.status)}>{h.status}</Badge>
+                    <Switch
+                      checked={h.enabled}
+                      onCheckedChange={(v) => void setEnabled(h.id, v)}
+                      aria-label={`Toggle handoff for ${h.sessionId}`}
+                    />
                   </TableCell>
                   <TableCell
                     className="max-w-[16rem] truncate font-mono text-xs"

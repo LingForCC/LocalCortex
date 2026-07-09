@@ -7,7 +7,7 @@ function validHandoff() {
     id: 'h1',
     sessionId: 'sess_abc',
     context: { parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' },
-    status: 'pending' as const,
+    enabled: true,
     createdAt: '2026-07-08T00:00:00Z',
     updatedAt: '2026-07-08T00:00:00Z',
   };
@@ -18,7 +18,7 @@ describe('HandoffSchema', () => {
     const h = HandoffSchema.parse(validHandoff());
     expect(h.id).toBe('h1');
     expect(h.context).toEqual({ parentTaskId: 'o2LOz5FWVIj', taskManager: 'omnifocus' });
-    expect(h.status).toBe('pending');
+    expect(h.enabled).toBe(true);
   });
 
   it('H-S2: context omitted → defaults to {}', () => {
@@ -36,18 +36,20 @@ describe('HandoffSchema', () => {
     expect(() => HandoffSchema.parse({ ...validHandoff(), sessionId: '' })).toThrow();
   });
 
-  it('H-S5: status not in enum → rejects', () => {
-    expect(() => HandoffSchema.parse({ ...validHandoff(), status: 'bogus' })).toThrow();
+  it('H-S5: enabled is required (omitting rejects)', () => {
+    const { enabled: _omit, ...rest } = validHandoff();
+    void _omit;
+    expect(() => HandoffSchema.parse(rest)).toThrow();
   });
 
-  it('H-S6: fulfilledRunId non-positive → rejects', () => {
-    expect(() => HandoffSchema.parse({ ...validHandoff(), fulfilledRunId: 0 })).toThrow();
-    expect(() => HandoffSchema.parse({ ...validHandoff(), fulfilledRunId: -3 })).toThrow();
+  it('H-S5b: enabled=false parses', () => {
+    const h = HandoffSchema.parse({ ...validHandoff(), enabled: false });
+    expect(h.enabled).toBe(false);
   });
 
-  it('H-S6b: fulfilledRunId positive → parses', () => {
-    const h = HandoffSchema.parse({ ...validHandoff(), fulfilledRunId: 7 });
-    expect(h.fulfilledRunId).toBe(7);
+  it('H-S6: enabled non-boolean → rejects', () => {
+    expect(() => HandoffSchema.parse({ ...validHandoff(), enabled: 1 })).toThrow();
+    expect(() => HandoffSchema.parse({ ...validHandoff(), enabled: 'yes' })).toThrow();
   });
 
   it('H-S7: reminderTitle optional — omitted parses', () => {
