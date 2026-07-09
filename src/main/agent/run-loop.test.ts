@@ -38,7 +38,7 @@ function stubRunner(resultText: string): AgentRunner {
 
 const mcpConfig: McpServersFile = {
   servers: {
-    omnifocus: {
+    demo: {
       transport: 'stdio',
       command: 'node',
       args: ['x.js'],
@@ -54,7 +54,7 @@ function makeRule(overrides: Partial<Rule> = {}): Rule {
     enabled: true,
     rule: 'Do the thing.',
     trigger: { type: 'event', eventType: 'codex.session-complete' },
-    mcpServers: ['omnifocus'],
+    mcpServers: ['demo'],
     backend: 'claude',
     sandbox: 'read-only',
     ...overrides,
@@ -163,8 +163,8 @@ describe('executeRun', () => {
       async run(input: RunInput) {
         // MCP config is per-call now: the resolved servers must be in
         // input.servers (the runner serializes them into --config flags).
-        expect(input.servers.omnifocus).toBeDefined();
-        expect(input.servers.omnifocus).toEqual({
+        expect(input.servers.demo).toBeDefined();
+        expect(input.servers.demo).toEqual({
           command: 'node',
           args: ['x.js'],
           env: { FOO: 'bar' },
@@ -284,8 +284,8 @@ describe('executeRun', () => {
     const emittingRunner: AgentRunner = {
       backend: 'claude',
       async run(_input: RunInput, onEvent?: RunEventCallback): Promise<RunResult> {
-        onEvent?.({ type: 'tool_call', tool: 'mcp__omnifocus__create_task', args: { title: 'X' } });
-        onEvent?.({ type: 'tool_result', tool: 'mcp__omnifocus__create_task', ok: true });
+        onEvent?.({ type: 'tool_call', tool: 'mcp__demo__create_item', args: { title: 'X' } });
+        onEvent?.({ type: 'tool_result', tool: 'mcp__demo__create_item', ok: true });
         onEvent?.({ type: 'assistant_text', text: 'Created the task.' });
         return { text: '{"status":"active"}', toolCalls: [], isError: false };
       },
@@ -307,8 +307,8 @@ describe('executeRun', () => {
 
     // Each event type produced one log line, tagged with the rule id.
     const lines = infoSpy.mock.calls.map((c) => String(c[0]));
-    expect(lines.some((l) => l.includes('tool_call mcp__omnifocus__create_task'))).toBe(true);
-    expect(lines.some((l) => l.includes('tool_result mcp__omnifocus__create_task ok'))).toBe(true);
+    expect(lines.some((l) => l.includes('tool_call mcp__demo__create_item'))).toBe(true);
+    expect(lines.some((l) => l.includes('tool_result mcp__demo__create_item ok'))).toBe(true);
     expect(lines.some((l) => l.includes('text: Created the task.'))).toBe(true);
 
     infoSpy.mockRestore();

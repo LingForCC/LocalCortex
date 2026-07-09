@@ -98,6 +98,10 @@ In the **Handoffs** panel:
   become `{{key}}` template variables in the fulfilling rule. Common keys:
   - `parentTaskId` — the task-manager id to nest under (e.g. OmniFocus
     `o2LOz5FWVIj`, the segment of `omnifocus:///task/o2LOz5FWVIj`).
+  - `parentTaskName` — the parent task's name. Recommended as a second key for
+    OmniFocus: the `omnifocus-mcp` server resolves by id first, then falls back
+    to name, so registering both lets the rule retry by name if id-matching
+    fails (see the sample rule below).
   - `taskManager` — `omnifocus`, `todoist`, … (informational; use it in rule
     filters or prompt text).
 - **Reminder title** (optional) — a human label for the reminder.
@@ -112,6 +116,14 @@ Create an **event-triggered rule** matching the completion event type. The
 rule's prompt renders the registered context variables. The rule differs per
 task manager only in `mcpServers` + prompt text.
 
+> **Tool names depend on your MCP server.** LocalCortex carries the parent id
+> to the agent; *how* the agent creates the subtask (tool name + parameter
+> names) is determined by whichever external OmniFocus/Todoist MCP server you
+> installed. The examples below assume the popular
+> [`omnifocus-mcp`](https://github.com/themotionmachine/OmniFocus-MCP) package
+> (`add_omnifocus_task` with `parentTaskId`/`parentTaskName`). If you use a
+> different server or fork, adjust the tool name and params to match.
+
 ### OmniFocus (external MCP server)
 
 Configure your external OmniFocus MCP server in `~/.localcortex/mcp-servers.json`
@@ -122,13 +134,25 @@ under the name `omnifocus`, then:
   "id": "r_review_omnifocus",
   "name": "Create review subtask on ZCode session complete",
   "enabled": true,
-  "rule": "A ZCode session working on an OmniFocus task has just completed. Create a review subtask under the OmniFocus task whose id is {{parentTaskId}}. Use mcp__omnifocus__create_task (pass parentId = {{parentTaskId}}) with the title 'Review agent work'. Emit status done once the subtask is created.",
+  "rule": "A ZCode session working on an OmniFocus task has just completed. Create a review subtask under the OmniFocus task whose id is {{parentTaskId}}. Call add_omnifocus_task with name 'Review agent work' and parentTaskId '{{parentTaskId}}'. If the tool reports the parent was not found, retry with parentTaskName '{{parentTaskName}}' instead. Emit status done once the subtask is created.",
   "trigger": { "type": "event", "eventType": "zcode.session-complete" },
   "mcpServers": ["omnifocus"],
   "backend": "codex",
   "sandbox": "read-only"
 }
 ```
+
+> **`parentTaskId` vs `parentTaskName`.** The `omnifocus-mcp` server resolves
+> the parent by id first (`parentTaskId`), then falls back to name
+> (`parentTaskName`). Id-matching is more accurate but can fail if the id
+> doesn't exactly match OmniFocus's internal primary key (e.g. a typo, or the
+> task lives in a non-front document). For robustness, register **both** in
+> the handoff context and have the rule fall back from id to name — as the
+> sample above does.
+>
+> The `parentTaskId` should be OmniFocus's internal task id (the segment of an
+> `omnifocus:///task/<id>` URL, e.g. `o2LOz5FWVIj`). You can confirm an id by
+> querying with the server's `query_omnifocus` tool.
 
 ### Todoist
 

@@ -13,7 +13,7 @@ function eventRule(id: string, eventType: string, filter?: Record<string, string
     enabled: true,
     rule: 'r',
     trigger: { type: 'event', eventType, ...(filter ? { filter } : {}) },
-    mcpServers: ['omnifocus'],
+    mcpServers: ['demo'],
     backend: 'claude',
     sandbox: 'read-only',
   };
