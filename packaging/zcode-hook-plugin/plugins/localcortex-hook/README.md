@@ -1,0 +1,76 @@
+# localcortex-hook (ZCode plugin)
+
+Bridges ZCode **session-complete** events into LocalCortex's local event ingress.
+Once installed and enabled, this plugin runs a `Stop` hook in **every** ZCode
+workspace — there is no per-project `config.json` to maintain.
+
+## What it does
+
+When an agent turn ends, the Stop hook POSTs a small JSON payload to
+LocalCortex's loopback ingress (`http://127.0.0.1:4729/event` by default):
+
+```json
+{
+  "type": "zcode.session-complete",
+  "source": "zcode",
+  "timestamp": "<UTC ISO-8601>",
+  "payload": {
+    "sessionId": "<ZCode session id>",
+    "workdir": "<current working directory>",
+    "summary": "<optional, from $LC_SUMMARY>"
+  }
+}
+```
+
+Any event rule matching `zcode.session-complete` (for example, a "create a
+review subtask" handoff rule) can then react. The hook is fire-and-forget: if
+LocalCortex isn't running or the ingress is down, the hook exits `0` and never
+fails the ZCode session.
+
+## Install (local-directory marketplace)
+
+1. In **Settings → Plugin Management → Discover → `+`**, add this directory as a
+   marketplace source:
+
+   ```
+   /Users/colin.liu/Repo/LocalCortex/packaging/zcode-hook-plugin
+   ```
+
+2. Install the **localcortex-hook** plugin from that marketplace.
+3. Make sure it is **enabled** (it's on by default after install). Plugin
+   enable/disable state lives under `plugins` in `~/.zcode/cli/config.json`.
+
+That's it — the hook is registered declaratively by `hooks/hooks.json`; there is
+nothing to add to your user or workspace config.
+
+## Configuration (environment variables)
+
+All optional. The hook uses these defaults:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LC_HOST` | `127.0.0.1` | Ingress host |
+| `LC_PORT` | `4729` | Ingress port |
+| `LC_SECRET` | _(unset)_ | Sent as `x-localcortex-secret` header when set (see `docs/architecture.md` §8) |
+| `LC_SESSION_ID` | _(unset)_ | Fallback if `CLAUDE_SESSION_ID` isn't exposed |
+| `LC_WORKDIR` | `$ZCODE_PROJECT_DIR` or `$PWD` | Override the reported working directory |
+| `LC_SUMMARY` | _(unset)_ | Optional summary string included in the payload |
+
+## Structure
+
+```
+localcortex-hook/
+├── .zcode-plugin/plugin.json   # manifest (name + metadata)
+├── hooks/hooks.json            # declarative Stop hook
+└── scripts/localcortex-hook.sh # the bridge script (curl-only, no deps)
+```
+
+`${CLAUDE_PLUGIN_ROOT}` resolves to this directory at runtime, so the script
+reference is portable and needs no hardcoded path.
+
+## Replacing the old user-scope hook
+
+This plugin supersedes the previous manual setup, which required editing
+`~/.zcode/cli/config.json` and keeping a script at
+`~/.zcode/cli/scripts/localcortex-hook.sh`. After installing this plugin you can
+remove that `hooks` block and delete the old script.

@@ -1,0 +1,17 @@
+{
+  "description": "Stop hook: POST session-complete context to LocalCortex's local event ingress.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "localcortex-hook",
+  "version": "0.1.0",
+  "description": "Bridges ZCode session-complete events into LocalCortex's local event ingress via a Stop hook. Fires in every ZCode workspace once enabled.",
+  "author": {
+    "name": "Colin Liu"
+  }
+}
