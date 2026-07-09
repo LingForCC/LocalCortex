@@ -102,6 +102,10 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
       runCount,
       maxRuns: rule.maxRuns,
       expiresAt: rule.expiresAt,
+      // Stop policy keys off the rule's trigger type (not the run-level trigger)
+      // so that a manual run of an event rule still gets the event-rule policy:
+      // event rules run as long as enabled, regardless of run outcome.
+      trigger: rule.trigger.type,
       // settings carries no global maxRuns override today; evaluateStop falls
       // back to the built-in DEFAULT_MAX_RUNS for rules that don't set one.
       now,

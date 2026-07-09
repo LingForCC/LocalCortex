@@ -284,9 +284,11 @@ Without a stop condition, every rule runs forever — including one-off rules li
 
 The app parses this JSON block from the agent's transcript. On `done` or `error`, it sets `enabled = false` and records the reason in run history. A disabled rule can be re-enabled manually by the user; doing so resets its run counter (fresh start).
 
+**Event-triggered rules run as long as they are enabled.** The agent-signaled `done`/`error` disable does **not** apply to event-triggered rules — a single event is meant to be a discrete reaction, and an event rule should keep reacting to future matching events regardless of one run's outcome. Only a user toggling the rule off, an explicit per-rule `maxRuns`, or an explicit `expiresAt` can auto-disable an event rule. (The `done`/`error` status is still *parsed* and recorded on the run for observability — it just doesn't disable.)
+
 **Backstop — structural limits.** Optional per-rule fields that bound waste regardless of whether the agent ever signals done:
 
-- `maxRuns` (default e.g. 48, ≈2 days at 60-min cadence) — when the run count reaches the limit, the app disables the rule with a "max runs reached" note.
+- `maxRuns` (default e.g. 48, ≈2 days at 60-min cadence) — when the run count reaches the limit, the app disables the rule with a "max runs reached" note. The default cap applies to **tick** rules; event-triggered rules ignore it (an explicit `maxRuns` on an event rule still caps it, e.g. a true one-shot with `maxRuns: 1`).
 - `expiresAt` (ISO timestamp) — after this time, the rule is disabled.
 
 If both are set, whichever triggers first disables the rule. These catch the case where the agent never decides to stop (e.g., a stalled MR that never merges) or where the status block fails to parse.
@@ -351,7 +353,7 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
    c. Performs writes to the sink via MCP as the rule directs.
    d. Emits a status block (`{"status":"active|done|error","reason":"..."}`) at the end of its final message.
 6. **Run recorder** logs every tool call, token cost, result, and the parsed status. Every run is recorded — including agent-side failures: if the runner throws post-staging (e.g. missing API key, placeholder token at spawn), the failure is recorded as an `error` run (with the error message) rather than thrown away. Only setup problems that occur before there is a prompt to record (missing rule, undefined MCP server) propagate as exceptions.
-7. **Stop check:** if the parsed status is `done` or `error`, the app sets `enabled = false` and records the reason. Also checked: `maxRuns` and `expiresAt` backstops.
+7. **Stop check:** if the parsed status is `done` or `error`, the app sets `enabled = false` and records the reason (tick rules only — suppressed for event rules, which run as long as enabled). Also checked: `maxRuns` and `expiresAt` backstops (event rules ignore the default `maxRuns` cap but honor an explicit `maxRuns` and `expiresAt`).
 8. MCP servers torn down, workdir optionally archived.
 
 ---

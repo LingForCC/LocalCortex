@@ -88,7 +88,8 @@ describe('executeRun', () => {
   it('disables the rule when the agent signals done', async () => {
     const rulesRepo = new RulesRepository(db);
     const runsRepo = new RunsRepository(db);
-    rulesRepo.create(makeRule());
+    // Tick rules are disabled by the agent's done/error status (event rules are not).
+    rulesRepo.create(makeRule({ trigger: { type: 'tick' } }));
 
     await executeRun(
       {
@@ -104,6 +105,30 @@ describe('executeRun', () => {
 
     expect(rulesRepo.get('r1')?.enabled).toBe(false);
     expect(rulesRepo.get('r1')?.disableReason).toContain('agent signaled done');
+  });
+
+  it('does NOT disable an event-triggered rule when the agent signals done', async () => {
+    // Event rules run as long as they are enabled — the agent's done/error
+    // status and the default maxRuns cap are suppressed for them. Only a user
+    // toggle, an explicit maxRuns, or an explicit expiresAt can stop them.
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    rulesRepo.create(makeRule()); // makeRule() defaults to an event trigger
+
+    await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => stubRunner('{"status":"done"}'),
+        appDataRoot: appData,
+        trigger: 'event',
+      },
+      { ruleId: 'r1' },
+    );
+
+    expect(rulesRepo.get('r1')?.enabled).toBe(true);
+    expect(rulesRepo.get('r1')?.disableReason).toBeUndefined();
   });
 
   it('keeps the rule enabled when the agent signals active', async () => {

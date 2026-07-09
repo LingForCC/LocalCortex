@@ -205,19 +205,21 @@ The agent emits a status block at the end of each run (see the prompt contract i
 ```
 
 - `active` — goal not yet met; keep firing.
-- `done` — goal achieved or no longer relevant; the app disables the rule and logs the reason.
-- `error` — could not complete (auth failure, item not found); the app disables the rule and surfaces the error.
+- `done` — goal achieved or no longer relevant; the app disables the rule and logs the reason (tick rules only).
+- `error` — could not complete (auth failure, item not found); the app disables the rule and surfaces the error (tick rules only).
 
 This is the primary mechanism because only the agent understands the rule's intent (it's natural language, not structured).
 
+> **Event-triggered rules are an exception:** they run as long as they are enabled — the agent's `done`/`error` status does **not** disable them, because each matching event is a discrete reaction and the rule should keep reacting to future events. Only a manual toggle, an explicit `maxRuns`, or an explicit `expiresAt` can auto-disable an event rule. The status is still parsed and recorded on each run for observability.
+
 ### Structural backstops (optional)
 
-- **`maxRuns`** — when the run count reaches this limit, the rule is disabled with a "max runs reached" note. Defaults to a global value (e.g., 48 ≈ 2 days at 60-min cadence) so no rule is truly unbounded; set to `null` to allow unlimited runs.
-- **`expiresAt`** — an ISO timestamp after which the rule is disabled. No default.
+- **`maxRuns`** — when the run count reaches this limit, the rule is disabled with a "max runs reached" note. Defaults to a global value (e.g., 48 ≈ 2 days at 60-min cadence) so no **tick** rule is truly unbounded; set to `null` to allow unlimited runs. Event-triggered rules ignore this default cap (they run indefinitely unless an explicit `maxRuns` is set); an explicit `maxRuns` still applies, e.g. a true one-shot with `maxRuns: 1`.
+- **`expiresAt`** — an ISO timestamp after which the rule is disabled. No default. Applies to all rules, including event-triggered ones.
 
 If both are set, whichever triggers first disables the rule. These catch the case where the agent never signals `done` (e.g., a stalled MR that never merges) or where the status block fails to parse.
 
-> **Note for event-triggered rules:** `maxRuns` and `expiresAt` apply to event-triggered rules too, but the semantics of `maxRuns` differ — an event-triggered rule with `maxRuns: 1` runs once on the first matching event and then disables itself (a true one-shot). With no limit, it reacts to every matching event indefinitely. Choose based on whether the rule is a standing watch or a one-off reaction.
+> **Note for event-triggered rules:** `expiresAt` applies to event-triggered rules as usual. `maxRuns` applies only when set explicitly — the default cap is suppressed, so an event rule with no `maxRuns` reacts to every matching event indefinitely (a standing watch). An explicit `maxRuns: 1` makes it a true one-shot that disables after the first matching event.
 
 ### Re-enabling
 

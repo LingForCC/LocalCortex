@@ -19,8 +19,10 @@ The app parses this from the transcript and acts:
 | `status` | Meaning | App action |
 | --- | --- | --- |
 | `active` | Goal not yet met; keep firing. | continue scheduling |
-| `done` | Goal achieved or no longer relevant. | **disable** the rule (`enabled=false`), record the reason. |
-| `error` | Could not complete (auth failure, item not found). | **disable** the rule, surface the error. |
+| `done` | Goal achieved or no longer relevant. | **disable** the rule (`enabled=false`), record the reason. (tick rules only) |
+| `error` | Could not complete (auth failure, item not found). | **disable** the rule, surface the error. (tick rules only) |
+
+> **Event-triggered rules are never disabled by run outcome.** An event rule runs as long as it is enabled — the `done`/`error` status does **not** disable it, because each matching event is a discrete reaction and the rule should keep reacting to future events. The status is still parsed and recorded on each run for observability; only a manual toggle, an explicit `maxRuns`, or an explicit `expiresAt` can auto-disable an event rule.
 
 The status contract is **app-authored** — appended to every prompt automatically. You never write it in the rule text. See [design: prompt contract](../../rule-config-schema.md#2-rule--natural-language-instruction).
 
@@ -35,15 +37,17 @@ Optional per-rule fields bound waste regardless of whether the agent ever signal
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `maxRuns` | global default (**48**, ≈2 days at 60-min cadence) | When the run count reaches this, disable with "max runs reached". Set to `null` for unlimited. |
-| `expiresAt` | none | ISO timestamp after which the rule auto-disables. |
+| `maxRuns` | global default (**48**, ≈2 days at 60-min cadence) | When the run count reaches this, disable with "max runs reached". Set to `null` for unlimited. The default cap applies to **tick** rules; event rules ignore it unless `maxRuns` is set explicitly. |
+| `expiresAt` | none | ISO timestamp after which the rule auto-disables. Applies to all rules. |
 
 If both are set, **whichever triggers first** disables the rule. These catch the case where the agent never decides to stop (a stalled MR that never merges) or where the status block fails to parse.
 
 ### `maxRuns` semantics per trigger
 - **Tick rule** with `maxRuns: 48` → runs up to 48 times, then disables.
+- **Tick rule** with no `maxRuns` → the default 48 applies.
+- **Event rule** with no `maxRuns` → the default cap is **suppressed**; reacts to every matching event indefinitely (a standing watch). This is the default for event rules.
 - **Event rule** with `maxRuns: 1` → a true **one-shot**: runs once on the first matching event, then disables.
-- **Event rule** with `maxRuns: null` → reacts to every matching event indefinitely (a standing watch).
+- **Event rule** with `maxRuns: null` → explicit unlimited (same behavior as omitting it).
 
 ---
 
@@ -56,11 +60,11 @@ Together they cover the realistic failure modes: intelligence where it works, a 
 
 ### Evaluation priority
 When a run finishes, the stop-check evaluates in this order (first hit disables):
-1. parsed status `done` or `error`
-2. `expiresAt` in the past
-3. `runCount >= effectiveMaxRuns`
+1. parsed status `done` or `error` — **tick rules only**; skipped for event rules
+2. `expiresAt` in the past — all rules
+3. `runCount >= effectiveMaxRuns` — tick rules use the default cap if `maxRuns` is unset; event rules apply this only when `maxRuns` is set explicitly
 
-The parsed status takes priority so a genuinely-done rule stops immediately rather than waiting on a backstop.
+For **tick** rules the parsed status takes priority so a genuinely-done rule stops immediately rather than waiting on a backstop. For **event** rules only the backstops that the user opted into (`expiresAt`, an explicit `maxRuns`) can disable — run outcome never does.
 
 ---
 
