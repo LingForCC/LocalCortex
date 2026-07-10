@@ -48,8 +48,16 @@ The rule fires the moment a matching event arrives at the app's **local HTTP ing
 
 | Field | Meaning |
 | --- | --- |
-| `eventType` | Required, non-empty. Matched against the event's `type` **exactly** (e.g. `codex.session-complete`, `claude.session-complete`, `build.failed`). Open-ended — whatever a source POSTs. |
+| `eventType` | Required, non-empty. Matched against the event's `type` **exactly** (e.g. `codex.session-complete`, `zcode.prompt-submit`, `build.failed`). Open-ended — whatever a source POSTs. |
 | `filter` | Optional. Glob filters on event-payload fields. v1 supports `*` / `?` globbing on string fields. |
+
+> **`prompt-submit` events are normal event types.** A `*.prompt-submit` event
+> type (`zcode.prompt-submit`, `codex.prompt-submit`) opens the handoff-attach
+> popup via the ingress `onEvent` observer **and** can trigger rules just like
+> any other event type — they are not popup-only. The popup fires regardless of
+> rule matches; rule matches fire regardless of the popup. See
+> [Handoffs → Prompt-submit events and rules](../handoffs/README.md#prompt-submit-events-and-rules)
+> for how enrichment interacts with prompt-submit rule runs.
 
 ### Matching
 A rule matches an event when:
@@ -82,9 +90,10 @@ curl -s -X POST http://127.0.0.1:4729/event \
 - Response: `{ "ok": true, "matched": <n> }` — `matched` is how many rules fired.
 
 ### Bridging external systems
-The app contains no system-specific monitoring code. External systems push events via hook scripts. LocalCortex ships one bridge and documents the pattern:
+The app contains no system-specific monitoring code. External systems push events via hook scripts. LocalCortex ships bridges and documents the pattern:
 
-- **Codex** — the bundled `src/main/events/codex-hook.sh` POSTs Codex's `session-complete` hook to the ingress. Install it into your Codex hooks config.
+- **Codex** — `src/main/events/codex-hook.sh` POSTs Codex's `session-complete` hook, and `src/main/events/codex-prompt-submit-hook.sh` POSTs a `prompt-submit` hook (for the attach popup). Install both into your Codex hooks config.
+- **ZCode** — `src/main/events/zcode-hook.sh` serves both the Stop (`zcode.session-complete`) and UserPromptSubmit (`zcode.prompt-submit`) hooks via an `LC_EVENT_TYPE` env override, or install the bundled `localcortex-hook` plugin (`packaging/zcode-hook-plugin/`) which registers both declaratively.
 - **Claude Code** — an equivalent shell hook POSTs on session/stop events.
 - **Arbitrary** — any script (`make`, CI, a `git` post-commit hook) can `curl` the endpoint.
 

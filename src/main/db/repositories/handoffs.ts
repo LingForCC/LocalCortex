@@ -87,6 +87,28 @@ export class HandoffsRepository {
     return row ? rowToHandoff(row) : null;
   }
 
+  /**
+   * The most recent handoff for a given sessionId regardless of enabled state,
+   * or null. Used by the prompt-submit popup to decide new-vs-existing mode:
+   * if any row exists (enabled OR disabled), the session is "existing" and the
+   * popup offers the enable/disable toggle; otherwise it's "new" and the popup
+   * offers the attach form.
+   *
+   * Differs from `findEnabledBySessionId` (completion-time enrichment), which
+   * intentionally ignores disabled handoffs so they never fire.
+   */
+  findBySessionId(sessionId: string): Handoff | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, session_id, context_json, reminder_title, enabled, created_at, updated_at
+         FROM pending_reviews
+         WHERE session_id = ?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(sessionId) as HandoffRow | undefined;
+    return row ? rowToHandoff(row) : null;
+  }
+
   /** Insert a new handoff (validated). Throws on PK conflict. */
   create(handoff: Handoff): void {
     const parsed = HandoffSchema.parse(handoff);

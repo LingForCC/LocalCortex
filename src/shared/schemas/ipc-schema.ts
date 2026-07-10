@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
-import { CreateHandoffSchema } from './handoff-schema.js';
+import { HandoffSchema, CreateHandoffSchema } from './handoff-schema.js';
 import { APPEARANCES } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
@@ -33,6 +33,18 @@ export const IPC = {
   HANDOFF_CREATE: 'handoffs:create',
   HANDOFF_DELETE: 'handoffs:delete',
   HANDOFF_SET_ENABLED: 'handoffs:setEnabled',
+
+  /**
+   * Main → popup push: a prompt-submit event arrived and the handoff-attach
+   * popup should show (or refresh) for this sessionId. Payload is
+   * `HandoffPromptPayloadSchema`.
+   */
+  HANDOFF_PROMPT_PUSH: 'handoffs:prompt',
+  /**
+   * Main → main-window push: a handoff changed (created/toggled/deleted),
+   * possibly from the popup window. The main Handoffs panel reloads its list.
+   */
+  HANDOFFS_CHANGED: 'handoffs:changed',
 
   SERVERS_LIST: 'servers:list',
   SERVERS_READ: 'servers:read',
@@ -85,6 +97,29 @@ export const SetHandoffEnabledMessageSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean(),
 });
+
+/**
+ * Payload pushed over `handoffs:prompt` to the popup window. Drives whether the
+ * popup renders the "attach" form (new session) or the "enable/disable" toggle
+ * (existing session).
+ *
+ * - `mode: 'new'` → no handoff row exists for `sessionId`; `handoff` is null.
+ * - `mode: 'existing'` → a handoff row exists; `handoff` is the current row so
+ *   the popup can show its enabled state and reminder title.
+ */
+export const HandoffPromptPayloadSchema = z.object({
+  /** The agent session id this prompt is about. */
+  sessionId: z.string().min(1),
+  /** Which UI to render. */
+  mode: z.enum(['new', 'existing']),
+  /** Event source: 'zcode' | 'codex' | <custom>. Informational only. */
+  source: z.string(),
+  /** The current handoff row for `existing` mode; null for `new` mode. */
+  handoff: HandoffSchema.nullable(),
+});
+
+/** Inferred TS type for the handoff prompt push payload. */
+export type HandoffPromptPayload = z.infer<typeof HandoffPromptPayloadSchema>;
 
 // --- Settings ---------------------------------------------------------------
 

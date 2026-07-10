@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 #
-# ZCode session-complete → LocalCortex ingress bridge.
+# ZCode → LocalCortex ingress bridge.
 #
 # Spec: mirrors src/main/events/codex-hook.sh. ZCode's hook system exposes the
 # current session id as the `CLAUDE_SESSION_ID` environment variable (and the
-# `${CLAUDE_SESSION_ID}` template). This Stop hook fires when an agent turn
-# ends; it POSTs the session context to LocalCortex's local event ingress so
-# any event rule matching `zcode.session-complete` (e.g. a "create a review
-# subtask" handoff rule) can react.
+# `${CLAUDE_SESSION_ID}` template).
+#
+# This one script serves BOTH lifecycle hooks by parameterizing the event type:
+#   - Stop             (default) → posts "zcode.session-complete" so any event
+#                                  rule matching it (e.g. a "create a review
+#                                  subtask" handoff rule) reacts.
+#   - UserPromptSubmit           → posts "zcode.prompt-submit" so LocalCortex
+#                                  opens the handoff-attach popup
+#                                  (docs/features/handoffs/README.md →
+#                                  "Prompt-submit prompt"). Register it with
+#                                  LC_EVENT_TYPE=zcode.prompt-submit.
 #
 # Usage — register in your ZCode workspace config (.zcode/config.json):
 #
@@ -20,6 +27,16 @@
 #             "hooks": [
 #               { "type": "command",
 #                 "command": "bash \"${ZCODE_PROJECT_DIR}/src/main/events/zcode-hook.sh\"",
+#                 "timeout": 10,
+#                 "statusMessage": "Notifying LocalCortex" }
+#             ]
+#           }
+#         ],
+#         "UserPromptSubmit": [
+#           {
+#             "hooks": [
+#               { "type": "command",
+#                 "command": "LC_EVENT_TYPE=zcode.prompt-submit bash \"${ZCODE_PROJECT_DIR}/src/main/events/zcode-hook.sh\"",
 #                 "timeout": 10,
 #                 "statusMessage": "Notifying LocalCortex" }
 #             ]
@@ -40,6 +57,11 @@ PORT="${LC_PORT:-4729}"
 HOST="${LC_HOST:-127.0.0.1}"
 URL="http://${HOST}:${PORT}/event"
 SECRET="${LC_SECRET:-}"
+# Event type/source are parameterized so the UserPromptSubmit hook registration
+# can reuse this one script: it sets LC_EVENT_TYPE=zcode.prompt-submit, and the
+# default (Stop hook, no override) emits the completion event.
+EVENT_TYPE="${LC_EVENT_TYPE:-zcode.session-complete}"
+EVENT_SOURCE="${LC_EVENT_SOURCE:-zcode}"
 SESSION_ID="${CLAUDE_SESSION_ID:-${LC_SESSION_ID:-}}"
 WORKDIR="${LC_WORKDIR:-${ZCODE_PROJECT_DIR:-${PWD:-}}}"
 SUMMARY="${LC_SUMMARY:-}"
@@ -65,8 +87,8 @@ ESCAPED_SESSION_ID="$(json_escape "${SESSION_ID}")"
 
 read -r -d '' PAYLOAD <<-JSON || true
 {
-  "type": "zcode.session-complete",
-  "source": "zcode",
+  "type": "${EVENT_TYPE}",
+  "source": "${EVENT_SOURCE}",
   "timestamp": "${TIMESTAMP}",
   "payload": {
     "sessionId": "${ESCAPED_SESSION_ID}",

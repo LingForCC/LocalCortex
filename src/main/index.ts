@@ -25,6 +25,8 @@ import { Scheduler } from './scheduler/scheduler.js';
 import { ConcurrencyQueue } from './scheduler/concurrency.js';
 import { startIngress } from './events/ingress.js';
 import { prepareHandoffEnrichment } from './events/handoff-enrichment.js';
+import { buildPromptSubmitPrompt, isPromptSubmitEvent } from './events/prompt-submit.js';
+import type { HandoffPromptPayload } from '@shared/schemas/ipc-schema';
 import { executeRun, type RunnerProvider } from './agent/run-loop.js';
 import { ClaudeAgentRunner } from './agent/claude.js';
 import { CodexAgentRunner } from './agent/codex.js';
@@ -63,6 +65,13 @@ let scheduler: Scheduler | null = null;
 let ingressServer: FastifyInstance | null = null;
 const lifecycle = new LifecycleManager();
 const inFlightAborts = new Set<AbortController>();
+
+/**
+ * Open handoff-attach popup windows, keyed by sessionId. At most one popup per
+ * session: a second prompt-submit for an already-open popup re-focuses it and
+ * re-pushes the (possibly changed) payload instead of stacking another window.
+ */
+const promptWindows = new Map<string, BrowserWindow>();
 
 /**
  * Push the effective dark-mode state (`nativeTheme.shouldUseDarkColors`) to the
@@ -187,6 +196,19 @@ async function bootstrap(): Promise<void> {
   ingressServer = await startIngress({
     port: 4729,
     getRules: () => rulesRepo.list().filter((r) => r.enabled),
+    // Side-effect-only observer: opens the handoff-attach popup for prompt-
+    // submit events (regardless of whether any rule matches them). Isolated in
+    // a try/catch inside the ingress so a popup failure never blocks the HTTP
+    // reply or the match/enqueue path.
+    onEvent: (event) => {
+      if (!isPromptSubmitEvent(event.type)) return;
+      try {
+        const payload = buildPromptSubmitPrompt(event, handoffsRepo);
+        if (payload) openHandoffPrompt(payload);
+      } catch (e) {
+        logError('prompt-submit popup failed', e);
+      }
+    },
     onMatched: async (event, matched) => {
       // Handoff enrichment: if this event carries a sessionId with an enabled
       // handoff registered, merge that handoff's opaque context into the event
@@ -194,10 +216,11 @@ async function bootstrap(): Promise<void> {
       // (e.g. {{parentTaskId}}). An enabled handoff fires on EVERY matching
       // event (so a multi-round session creates the reminder each round); there
       // is no fulfilled state, so nothing to mark afterwards.
-      const { event: enrichedEvent, matched: handoffMatched, enrichment } = prepareHandoffEnrichment(
-        event,
-        handoffsRepo,
-      );
+      const {
+        event: enrichedEvent,
+        matched: handoffMatched,
+        enrichment,
+      } = prepareHandoffEnrichment(event, handoffsRepo);
       // Log the enrichment result so the merged context (the {{key}} vars the
       // fulfilling rule will render) is visible in the log.
       if (enrichment) {
@@ -223,7 +246,9 @@ async function bootstrap(): Promise<void> {
 
   // 7. IPC handlers.
   registerRulesIpc(rulesRepo);
-  registerHandoffsIpc(handoffsRepo);
+  // Broadcast handoff mutations to the main window so its Handoffs list refreshes
+  // regardless of where the change originated (main panel vs. prompt-submit popup).
+  registerHandoffsIpc(handoffsRepo, () => mainWindow?.webContents.send(IPC.HANDOFFS_CHANGED));
   registerRunsIpc(runsRepo, (ruleId, eventPayload) =>
     enqueueRun(
       ruleId,
@@ -294,6 +319,69 @@ async function createWindow(): Promise<void> {
     // importantly from Playwright E2E, which launches .vite/build/main.js directly.
     await mainWindow.loadFile(join(__dirname, '../renderer/main_window/index.html'));
   }
+}
+
+/**
+ * Open (or re-focus) the prompt-submit handoff-attach popup for one session.
+ *
+ * Loads the same renderer entry as the main window but with `?view=handoff-prompt`,
+ * which `App.tsx` uses to branch into the popup UI instead of the tabbed shell.
+ * The prompt payload is pushed over IPC once the renderer has finished loading.
+ * One popup per sessionId: if one is already open, it's focused and refreshed.
+ */
+function openHandoffPrompt(payload: HandoffPromptPayload): void {
+  const existing = promptWindows.get(payload.sessionId);
+  if (existing && !existing.isDestroyed()) {
+    existing.show();
+    existing.focus();
+    existing.webContents.send(IPC.HANDOFF_PROMPT_PUSH, payload);
+    return;
+  }
+
+  const win = new BrowserWindow({
+    width: 480,
+    height: 560,
+    resizable: false,
+    maximizable: false,
+    title: payload.mode === 'new' ? 'Attach handoff' : 'Session handoff',
+    parent: mainWindow ?? undefined,
+    // Not `modal: true` — the main window isn't usable for this anyway, and a
+    // modal would block the app if the popup is left open.
+    modal: false,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  promptWindows.set(payload.sessionId, win);
+  win.on('closed', () => {
+    promptWindows.delete(payload.sessionId);
+  });
+
+  win.on('ready-to-show', () => {
+    win.show();
+    win.focus();
+  });
+
+  // Push the prompt payload once the renderer (and its onPrompt listener) is
+  // ready — mirrors pushThemeToRenderer.
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send(IPC.HANDOFF_PROMPT_PUSH, payload);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logger.error(`Prompt renderer failed to load: code=${code} desc=${desc} url=${url}`);
+  });
+
+  const load = MAIN_WINDOW_VITE_DEV_SERVER_URL
+    ? win.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}?view=handoff-prompt`)
+    : win.loadFile(join(__dirname, '../renderer/main_window/index.html'), {
+        query: { view: 'handoff-prompt' },
+      });
+  load.catch((e) => logError('Failed to load handoff-prompt window', e));
 }
 
 // Single instance — focus the existing window on a second launch.

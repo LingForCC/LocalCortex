@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ZCode session-complete → LocalCortex ingress bridge (plugin).
+# ZCode → LocalCortex ingress bridge (plugin).
 #
 # Ported from the user-scope copy at ~/.zcode/cli/scripts/localcortex-hook.sh
 # (originally adapted from src/main/events/zcode-hook.sh in this repo). This
@@ -9,10 +9,16 @@
 # hook fires in every ZCode workspace once the plugin is enabled.
 #
 # ZCode's hook system exposes the current session id as the `CLAUDE_SESSION_ID`
-# environment variable (and the `${CLAUDE_SESSION_ID}` template). This Stop hook
-# fires when an agent turn ends; it POSTs the session context to LocalCortex's
-# local event ingress so any event rule matching `zcode.session-complete`
-# (e.g. a "create a review subtask" handoff rule) can react.
+# environment variable (and the `${CLAUDE_SESSION_ID}` template). This script is
+# registered for BOTH the Stop and UserPromptSubmit hooks (see hooks/hooks.json):
+#   - Stop             → posts "zcode.session-complete" so any event rule
+#                        matching it (e.g. a "create a review subtask" handoff
+#                        rule) reacts.
+#   - UserPromptSubmit → posts "zcode.prompt-submit" so LocalCortex opens the
+#                        handoff-attach popup (docs/features/handoffs/README.md
+#                        → "Prompt-submit prompt"). The UserPromptSubmit entry
+#                        sets LC_EVENT_TYPE=zcode.prompt-submit so this same
+#                        script emits the prompt-submit event type.
 #
 # Registered declaratively by hooks/hooks.json:
 #
@@ -35,6 +41,11 @@ PORT="${LC_PORT:-4729}"
 HOST="${LC_HOST:-127.0.0.1}"
 URL="http://${HOST}:${PORT}/event"
 SECRET="${LC_SECRET:-}"
+# Event type/source are parameterized so the UserPromptSubmit hook registration
+# can reuse this one script: it sets LC_EVENT_TYPE=zcode.prompt-submit, and the
+# default (Stop hook, no override) emits the completion event.
+EVENT_TYPE="${LC_EVENT_TYPE:-zcode.session-complete}"
+EVENT_SOURCE="${LC_EVENT_SOURCE:-zcode}"
 SESSION_ID="${CLAUDE_SESSION_ID:-${LC_SESSION_ID:-}}"
 # The plugin can fire outside any repo (user scope), so prefer the actual
 # current working directory over ZCODE_PROJECT_DIR (only set inside a project).
@@ -62,8 +73,8 @@ ESCAPED_SESSION_ID="$(json_escape "${SESSION_ID}")"
 
 read -r -d '' PAYLOAD <<-JSON || true
 {
-  "type": "zcode.session-complete",
-  "source": "zcode",
+  "type": "${EVENT_TYPE}",
+  "source": "${EVENT_SOURCE}",
   "timestamp": "${TIMESTAMP}",
   "payload": {
     "sessionId": "${ESCAPED_SESSION_ID}",

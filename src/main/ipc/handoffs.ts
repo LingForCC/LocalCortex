@@ -6,6 +6,11 @@
  *
  * `create` mints a UUID id (the renderer-supplied payload has no id) and
  * returns the freshly-read canonical row so the renderer store can append it.
+ *
+ * `onChanged` (optional) fires after any mutation (create/delete/setEnabled)
+ * so windows other than the one that originated the change can refresh —
+ * notably the main window's Handoffs list when a handoff is created/toggled
+ * from the prompt-submit popup window.
  */
 
 import { ipcMain } from 'electron';
@@ -19,7 +24,10 @@ import {
 import type { HandoffsRepository } from '../db/repositories/handoffs.js';
 import type { Handoff } from '@shared/types';
 
-export function registerHandoffsIpc(handoffsRepo: HandoffsRepository): void {
+export function registerHandoffsIpc(
+  handoffsRepo: HandoffsRepository,
+  onChanged?: () => void,
+): void {
   ipcMain.handle(IPC.HANDOFF_LIST, async () => handoffsRepo.list());
 
   ipcMain.handle(IPC.HANDOFF_GET, async (_evt, raw) => {
@@ -40,16 +48,21 @@ export function registerHandoffsIpc(handoffsRepo: HandoffsRepository): void {
       updatedAt: now,
     };
     handoffsRepo.create(handoff);
+    onChanged?.();
     return handoffsRepo.get(handoff.id);
   });
 
   ipcMain.handle(IPC.HANDOFF_DELETE, async (_evt, raw) => {
     const { id } = HandoffIdSchema.parse(raw);
-    return handoffsRepo.delete(id);
+    const removed = handoffsRepo.delete(id);
+    if (removed) onChanged?.();
+    return removed;
   });
 
   ipcMain.handle(IPC.HANDOFF_SET_ENABLED, async (_evt, raw) => {
     const { id, enabled } = SetHandoffEnabledMessageSchema.parse(raw);
-    return handoffsRepo.setEnabled(id, enabled);
+    const updated = handoffsRepo.setEnabled(id, enabled);
+    if (updated) onChanged?.();
+    return updated;
   });
 }

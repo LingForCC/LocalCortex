@@ -1,5 +1,5 @@
 {
-  "description": "Stop hook: POST session-complete context to LocalCortex's local event ingress.",
+  "description": "Bridges ZCode session lifecycle events (prompt-submit + complete) into LocalCortex's local event ingress.",
   "hooks": {
     "Stop": [
       {
@@ -7,6 +7,18 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "LC_EVENT_TYPE=zcode.prompt-submit bash \"${CLAUDE_PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
             "timeout": 10,
             "statusMessage": "Notifying LocalCortex"
           }

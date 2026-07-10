@@ -36,6 +36,15 @@ export interface IngressOptions {
   getRules: () => Rule[];
   /** Called with matched rules; enqueues runs onto the shared queue. */
   onMatched: EnqueueFn;
+  /**
+   * Called once for EVERY accepted event, before rule matching and independent
+   * of whether any rule matched. Used for side-effect-only reactions to event
+   * types that carry no rule (e.g. the prompt-submit handoff popup). Awaited
+   * but NOT on the HTTP-response critical path — it runs after `onMatched` and
+   * before the 200 reply; errors propagate to the caller via the handler's own
+   * try/catch (the ingress logs but never lets one break the reply).
+   */
+  onEvent?: (event: IncomingEvent) => Promise<void> | void;
 }
 
 /**
@@ -74,6 +83,17 @@ export function buildIngress(opts: IngressOptions): FastifyInstance {
     logger.info(
       `ingress: event type=${event.type} ts=${event.timestamp} payload=${JSON.stringify(event.payload)}`,
     );
+
+    // Side-effect-only hook (e.g. the prompt-submit popup) fires for every
+    // accepted event regardless of rule matches. Isolate it so a throwing
+    // observer can never break the match/enqueue path or the HTTP reply.
+    if (opts.onEvent) {
+      try {
+        await opts.onEvent(event);
+      } catch (e) {
+        logger.warn(`ingress: onEvent observer failed: ${(e as Error).message}`);
+      }
+    }
 
     const matched = matchEventsToRules(event, opts.getRules());
     if (matched.length > 0) {

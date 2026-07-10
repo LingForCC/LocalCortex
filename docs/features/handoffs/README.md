@@ -21,6 +21,41 @@ review the agent's work later without watching the session.
 
 ---
 
+## Prompt-submit prompt
+
+When a user submits a prompt, the source's `UserPromptSubmit` hook POSTs a
+`<source>.prompt-submit` event (e.g. `zcode.prompt-submit`,
+`codex.prompt-submit`). LocalCortex reacts by opening a **separate popup
+window** that asks you what to do, depending on whether a handoff already exists
+for that session:
+
+- **New session** (no handoff row) → the popup offers the **attach form**:
+  the session id is pre-filled, and you add context rows (`parentTaskId`,
+  `parentTaskName`, …) plus an optional reminder title, then **Attach handoff**.
+  This is the same form as the Handoffs panel, surfaced at the moment the
+  session starts — no need to remember to register it mid-task.
+- **Existing session** (a handoff row already exists) → the popup offers an
+  **enable/disable toggle** so you can turn the handoff back on (or off) when
+  you resume a session.
+
+The popup is the primary use of a `prompt-submit` event, but it is **not the
+only** one — a prompt-submit event is a normal event type and will also drive
+any event-triggered rule that matches it, exactly like `session-complete`. See
+"Prompt-submit events and rules" below for the interaction between the popup,
+rule runs, and enrichment.
+
+> **One popup per session.** If a popup is already open for a session and
+> another `prompt-submit` arrives, LocalCortex re-focuses and refreshes it
+> rather than opening a second window.
+
+The start hooks are installed alongside the completion hooks (see §1 below).
+Both backends are supported: the ZCode plugin registers `UserPromptSubmit`
+automatically, and the standalone Codex bridge script
+(`src/main/events/codex-prompt-submit-hook.sh`) is wired into a Codex hooks
+config.
+
+---
+
 ## The flow
 
 1. **Register** a handoff (Handoffs panel): enter the agent **session id** and a
@@ -40,11 +75,13 @@ review the agent's work later without watching the session.
 
 ---
 
-## 1. Install a completion hook (once per agent source)
+## 1. Install lifecycle hooks (once per agent source)
 
-Each agent source needs a Stop hook that notifies LocalCortex when a session
-ends. The hook reads the source's session-id env var and POSTs it to the
-loopback ingress.
+Each agent source needs a **Stop** hook (to notify LocalCortex when a session
+ends) and, optionally, a **UserPromptSubmit** hook (to open the attach popup
+when a user submits a prompt). The completion hook reads the source's
+session-id env var and POSTs it to the loopback ingress; the start hook does
+the same on prompt submit.
 
 ### ZCode
 
@@ -67,26 +104,47 @@ shipped bridge in your workspace `.zcode/config.json`:
             }
           ]
         }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "LC_EVENT_TYPE=zcode.prompt-submit bash \"${ZCODE_PROJECT_DIR}/src/main/events/zcode-hook.sh\"",
+              "timeout": 10,
+              "statusMessage": "Notifying LocalCortex"
+            }
+          ]
+        }
       ]
     }
   }
 }
 ```
 
-This fires a `zcode.session-complete` event.
+The `Stop` entry fires a `zcode.session-complete` event; the `UserPromptSubmit`
+entry reuses the **same script** with `LC_EVENT_TYPE=zcode.prompt-submit` to
+fire a `zcode.prompt-submit` event (which opens the attach popup).
 
 > **Note on `Stop`:** ZCode has no dedicated "session closed" event; `Stop`
 > fires when an agent turn ends. Because a handoff fires on every match while
 > enabled (not fire-once), each `Stop` for the session creates a new reminder —
 > which is the intent for multi-round sessions. Disable the handoff when you no
 > longer want reminders for that session.
+>
+> **Prefer the plugin.** Instead of editing `.zcode/config.json` per workspace,
+> install the bundled **`localcortex-hook` plugin** (see
+> `packaging/zcode-hook-plugin/`), which registers both the Stop and
+> UserPromptSubmit hooks across every workspace in one step.
 
 ### Codex / Claude Code
 
-The shipped `src/main/events/codex-hook.sh` already fires
-`codex.session-complete` from Codex's first-party hooks. Wire it into your
-Codex hooks config. Claude Code is analogous (`CLAUDE_SESSION_ID`,
-`claude.session-complete`).
+The shipped `src/main/events/codex-hook.sh` fires `codex.session-complete` from
+Codex's first-party hooks; wire it into your Codex hooks config. For the
+prompt-submit popup, also wire `src/main/events/codex-prompt-submit-hook.sh`
+into the Codex `UserPromptSubmit` hook — it reads the session id from Codex's stdin
+JSON and POSTs a `codex.prompt-submit` event. Claude Code is analogous
+(`CLAUDE_SESSION_ID`, `claude.session-complete` / `claude.prompt-submit`).
 
 ### Cursor / others
 
@@ -195,3 +253,39 @@ is the only place correlation happens: it looks up the handoff by
 before the run is enqueued. From there the existing template-render path carries
 the variables into the rule's prompt — **no prompt-builder changes were needed**
 to support handoffs.
+
+### Prompt-submit events and rules
+
+A `<source>.prompt-submit` event is a normal event type — it is **not**
+popup-only. Two things happen, in order, for every accepted prompt-submit event
+(see `src/main/events/ingress.ts`):
+
+1. **Popup** (`onEvent` observer): `buildPromptSubmitPrompt` looks up any
+   existing handoff for `payload.sessionId` (enabled **or** disabled — via
+   `findBySessionId`, distinct from the completion-time `findEnabledBySessionId`)
+   and opens the handoff-attach popup.
+2. **Rules** (`onMatched`): any event-triggered rule whose `eventType` equals
+   the prompt-submit type (e.g. `zcode.prompt-submit`) matches and runs, just
+   like for `session-complete`. **Handoff enrichment applies to these runs too**
+   — `prepareHandoffEnrichment` runs unconditionally inside `onMatched`, so if
+   an enabled handoff exists for that `sessionId`, its context merges into the
+   payload and the rule sees the `{{key}}` variables.
+
+The practical catch: whether enrichment *adds anything* to a prompt-submit rule
+run depends on whether a handoff already exists **at the moment the event
+arrives** — a handoff created *from the popup during this same event* is created
+after the run was already enqueued, so that first run won't see it. Enrichment
+only kicks in on a *later* prompt submit where the handoff was already
+registered and enabled.
+
+| Event type | Popup? | Rules run? | Enrichment applies? |
+| --- | --- | --- | --- |
+| `*.prompt-submit` | Yes | Yes, if a rule matches it | Yes, if an enabled handoff pre-exists for that `sessionId` |
+| `*.session-complete` | No | Yes, if a rule matches it | Yes, if an enabled handoff pre-exists for that `sessionId` |
+
+So you *can* author rules on prompt-submit (e.g. "when a user submits a prompt,
+log a start event" or "prep the workspace"), and they'll receive enriched
+context on later submits — but the common case (the first prompt of a brand-new
+session, where you attach the handoff from the popup) won't be enriched because
+no handoff existed yet. For the canonical "create a review subtask" flow, keep
+your rule on `*.session-complete`.

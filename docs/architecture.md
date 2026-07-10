@@ -128,7 +128,10 @@ localcortex/
 │   │   ├── events/
 │   │   │   ├── ingress.ts         ← local HTTP listener (127.0.0.1:PORT/event)
 │   │   │   ├── matcher.ts         ← routes events → rules by eventType + filter
-│   │   │   └── codex-hook.sh      ← hook script for Codex session-complete (ships)
+│   │   │   ├── prompt-submit.ts   ← prompt-submit popup decision logic (pure)
+│   │   │   ├── codex-hook.sh      ← hook script for Codex session-complete (ships)
+│   │   │   ├── codex-prompt-submit-hook.sh ← hook for Codex prompt-submit (ships)
+│   │   │   └── zcode-hook.sh      ← hook for ZCode start+complete (ships)
 │   │   ├── agent/
 │   │   │   ├── runner.ts          ← AgentRunner interface (backend-agnostic)
 │   │   │   ├── claude.ts          ← ClaudeAgentRunner (options.cwd, mcpServers)
@@ -317,15 +320,37 @@ curl -s -X POST http://127.0.0.1:4729/event \
 The ingress:
 
 1. **Validates** the event has a `type` and `timestamp`; rejects malformed payloads with 400.
-2. **Matches** the event to rules whose `trigger.eventType` equals the event's `type`, applying any optional filter (e.g., `workdir` glob). Multiple rules can match one event; each produces an independent agent run.
-3. **Enqueues** each matched rule into the same capped-parallelism queue the scheduler uses (§6.4), with the event payload attached as context.
-4. **Renders** the event payload into the rule text before the agent runs — `{{workdir}}`, `{{summary}}`, `{{sessionId}}` etc. become concrete values in the prompt.
+2. Fires the optional **`onEvent` observer** once per accepted event, before rule matching and independent of whether any rule matched. This is the hook for **side-effect-only reactions** that carry no rule — notably the prompt-submit handoff-attach popup (§ below). It is isolated in a try/catch so an observer failure never blocks the match/enqueue path or the HTTP reply.
+3. **Matches** the event to rules whose `trigger.eventType` equals the event's `type`, applying any optional filter (e.g., `workdir` glob). Multiple rules can match one event; each produces an independent agent run.
+4. **Enqueues** each matched rule into the same capped-parallelism queue the scheduler uses (§6.4), with the event payload attached as context.
+5. **Renders** the event payload into the rule text before the agent runs — `{{workdir}}`, `{{summary}}`, `{{sessionId}}` etc. become concrete values in the prompt.
+
+#### Prompt-submit events (popup + optional rules)
+
+`*.prompt-submit` event types (`zcode.prompt-submit`, `codex.prompt-submit`) are
+**not** popup-only — they flow through the full pipeline like any other event:
+
+1. The `onEvent` observer fires the **handoff-attach popup** via
+   `buildPromptSubmitPrompt` (`src/main/events/prompt-submit.ts`), regardless of
+   rule matches. The popup is a separate `BrowserWindow` loaded with
+   `?view=handoff-prompt`.
+2. The normal match/enqueue path then runs: any rule whose `eventType` equals
+   the prompt-submit type matches and runs, and **handoff enrichment applies to
+   those runs** just as it does for `session-complete`.
+
+So the popup and rule runs are independent and composable. The practical
+catch — a handoff attached *from the popup during this same event* is created
+after the run was already enqueued, so that first run won't see its context;
+enrichment only kicks in on a later prompt submit where the handoff
+pre-existed. See `docs/features/handoffs/README.md` → "Prompt-submit events and
+rules".
 
 ### Bridging external systems to the ingress
 
-The app contains no system-specific monitoring code. External systems push events via hook scripts or shell commands. LocalCortex ships one such bridge and documents the pattern for others:
+The app contains no system-specific monitoring code. External systems push events via hook scripts or shell commands. LocalCortex ships bridges and documents the pattern for others:
 
-- **Codex** — Codex's first-party [hooks system](https://developers.openai.com/codex/hooks) fires a `session-complete` event. LocalCortex ships `codex-hook.sh`, which the user installs into their Codex hooks config; it POSTs the session context to the ingress.
+- **Codex** — Codex's first-party [hooks system](https://developers.openai.com/codex/hooks) fires `session-complete` and `UserPromptSubmit` events. LocalCortex ships `codex-hook.sh` (completion → `codex.session-complete`) and `codex-prompt-submit-hook.sh` (prompt-submit → `codex.prompt-submit`, reading session id from Codex's stdin JSON), which the user installs into their Codex hooks config.
+- **ZCode** — `zcode-hook.sh` serves both Stop and UserPromptSubmit via an `LC_EVENT_TYPE` override, or install the `localcortex-hook` plugin (`packaging/zcode-hook-plugin/`) which registers both declaratively.
 - **Claude Code** — Claude Code's hooks similarly fire on session/stop events; an equivalent shell hook POSTs to the ingress.
 - **Arbitrary** — any script (`make`, CI, a `git` post-commit hook) can `curl` the endpoint. The ingress is just an HTTP listener.
 

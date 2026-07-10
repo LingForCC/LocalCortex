@@ -62,6 +62,33 @@ describe('HandoffsRepository', () => {
     expect(repo.findEnabledBySessionId('sess_x')?.id).toBe('new');
   });
 
+  it('findBySessionId matches enabled AND disabled rows (unlike findEnabled)', () => {
+    repo.create(makeHandover({ id: 'h_on', sessionId: 'sess_a', enabled: true }));
+    repo.create(makeHandover({ id: 'h_off', sessionId: 'sess_b', enabled: false }));
+    expect(repo.findBySessionId('sess_a')?.id).toBe('h_on');
+    // A disabled row still matches findBySessionId (prompt-submit new-vs-existing check).
+    expect(repo.findBySessionId('sess_b')?.id).toBe('h_off');
+    expect(repo.findBySessionId('sess_unknown')).toBeNull();
+    // Contrast: findEnabledBySessionId ignores the disabled row.
+    expect(repo.findEnabledBySessionId('sess_b')).toBeNull();
+  });
+
+  it('findBySessionId returns the most recent when several exist', () => {
+    repo.create(
+      makeHandover({ id: 'old', sessionId: 'sess_x', createdAt: '2026-07-01T00:00:00Z' }),
+    );
+    repo.create(
+      makeHandover({
+        id: 'new',
+        sessionId: 'sess_x',
+        enabled: false,
+        createdAt: '2026-07-09T00:00:00Z',
+      }),
+    );
+    // Newest first even when the newest is disabled.
+    expect(repo.findBySessionId('sess_x')?.id).toBe('new');
+  });
+
   it('setEnabled flips the flag and persists', () => {
     repo.create(makeHandover({ id: 'h1', enabled: true }));
     expect(repo.setEnabled('h1', false)).toBe(true);

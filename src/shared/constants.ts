@@ -47,6 +47,25 @@ export const CLAUDE_SESSION_COMPLETE_EVENT = 'claude.session-complete';
  */
 export const ZCODE_SESSION_COMPLETE_EVENT = 'zcode.session-complete';
 
+/**
+ * Event type emitted by the Codex `UserPromptSubmit` hook bridge
+ * (src/main/events/codex-prompt-submit-hook.sh). Fires when a Codex user
+ * submits a prompt. The ingress's `onEvent` observer reacts by opening the
+ * handoff-attach popup (docs/features/handoffs/README.md → "Prompt-submit
+ * events and rules"); the normal match/enqueue path then runs any rule whose
+ * `eventType` equals this (enrichment applies too). Not popup-only.
+ */
+export const CODEX_PROMPT_SUBMIT_EVENT = 'codex.prompt-submit';
+
+/**
+ * Event type emitted by the ZCode `UserPromptSubmit` hook bridge
+ * (src/main/events/zcode-hook.sh with LC_EVENT_TYPE=zcode.prompt-submit).
+ * Mirrors the Codex prompt-submit event: fires when a ZCode user submits a
+ * prompt, opens the handoff-attach popup, and — like any event type — can
+ * drive event-triggered rules that match it.
+ */
+export const ZCODE_PROMPT_SUBMIT_EVENT = 'zcode.prompt-submit';
+
 /** Status values the agent emits in the status-contract block (arch §6.6). */
 export const RULE_STATUSES = ['active', 'done', 'error'] as const;
 

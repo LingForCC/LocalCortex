@@ -1,5 +1,9 @@
 /**
  * App shell — nav between Rules / Run history / Sources / Settings.
+ *
+ * The same renderer entry is reused for the prompt-submit handoff popup: when
+ * loaded with `?view=handoff-prompt`, we render <HandoffPrompt/> instead of the
+ * tabbed shell (see src/main/index.ts openHandoffPrompt).
  */
 
 import * as React from 'react';
@@ -7,6 +11,7 @@ import { Button } from '@renderer/components/ui/button';
 import { RuleList } from './views/RuleList';
 import { RunHistory } from './views/RunHistory';
 import { Handoffs } from './views/Handoffs';
+import { HandoffPrompt } from './views/HandoffPrompt';
 import { Sources } from './views/Sources';
 import { Settings } from './views/Settings';
 
@@ -20,7 +25,22 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'settings', label: 'Settings' },
 ];
 
+/** What the renderer should show, derived from the launch `?view=` query flag. */
+function readView(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('view');
+}
+
 export function App() {
+  // Popup window: skip the tabbed shell entirely.
+  if (readView() === 'handoff-prompt') {
+    return <HandoffPrompt />;
+  }
+
+  return <Shell />;
+}
+
+function Shell() {
   const [tab, setTab] = React.useState<Tab>('rules');
 
   // Apply the effective dark-mode state from Electron's nativeTheme. The main

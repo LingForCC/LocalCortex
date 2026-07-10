@@ -57,6 +57,14 @@ export function Handoffs() {
     void load();
   }, [load]);
 
+  // Refresh when a handoff changes elsewhere (e.g. created/toggled from the
+  // prompt-submit popup window) so this list stays in sync without a manual
+  // reload.
+  React.useEffect(() => {
+    const off = window.api.handoffs.onChanged(() => void load());
+    return off;
+  }, [load]);
+
   /** Update a single context row's key or value. */
   const updateRow = (idx: number, patch: Partial<ContextRow>): void => {
     setContextRows((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));

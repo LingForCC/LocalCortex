@@ -224,4 +224,27 @@ describe('prepareHandoffEnrichment (composition)', () => {
     const { matched } = prepareHandoffEnrichment(event, repo);
     expect(matched).toBe(false);
   });
+
+  // Regression guard: enrichment is event-type-agnostic — it keys only on
+  // payload.sessionId. A prompt-submit event for a session with an enabled
+  // handoff (e.g. a resume) MUST enrich too, since prompt-submit rules run the
+  // same match/enqueue path as session-complete. Locks in the corrected
+  // behavior so a future type-based exclusion doesn't silently pass.
+  it('H-I7: enriches a prompt-submit event when an enabled handoff exists (resume case)', () => {
+    const repo = makeRepo({
+      sess_resume: [
+        {
+          id: 'h_resume',
+          context: { parentTaskId: 'o2LO', taskManager: 'omnifocus' },
+          enabled: true,
+        },
+      ],
+    });
+    const event: Ev = { type: 'zcode.prompt-submit', payload: { sessionId: 'sess_resume' } };
+    const { event: out, matched, enrichment } = prepareHandoffEnrichment(event, repo);
+    expect(matched).toBe(true);
+    expect(out.payload['parentTaskId']).toBe('o2LO');
+    expect(out.payload['taskManager']).toBe('omnifocus');
+    expect(enrichment).not.toBeNull();
+  });
 });
