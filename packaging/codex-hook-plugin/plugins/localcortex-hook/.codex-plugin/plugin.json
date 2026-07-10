@@ -1,0 +1,18 @@
+{
+  "name": "localcortex-hook",
+  "version": "0.1.0+codex.20260710160858",
+  "description": "Bridges Codex Desktop lifecycle events into LocalCortex's local event ingress.",
+  "author": {
+    "name": "Colin Liu"
+  },
+  "keywords": ["localcortex", "codex", "hooks", "handoff"],
+  "interface": {
+    "displayName": "LocalCortex Hook",
+    "shortDescription": "Send Codex lifecycle events to LocalCortex.",
+    "longDescription": "Notifies LocalCortex when a Codex prompt is submitted or a turn ends, enabling handoff prompts and event-triggered rules in every workspace.",
+    "developerName": "Colin Liu",
+    "category": "Productivity",
+    "capabilities": ["Lifecycle hooks"],
+    "defaultPrompt": ["Help me verify the LocalCortex hook installation."]
+  }
+}

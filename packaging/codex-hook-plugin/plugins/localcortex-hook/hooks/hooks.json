@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "LC_EVENT_TYPE=codex.prompt-submit bash \"${PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ]
+  }
+}
