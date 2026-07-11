@@ -16,6 +16,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import initialSql from './migrations/001_initial.sql?raw';
 import handoffsSql from './migrations/002_handoffs.sql?raw';
 import handoffsEnabledSql from './migrations/003_handoffs_enabled.sql?raw';
+import catalogSql from './migrations/004_catalog.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -32,6 +33,7 @@ const MIGRATIONS: Migration[] = [
   { version: 1, sql: initialSql },
   { version: 2, sql: handoffsSql },
   { version: 3, sql: handoffsEnabledSql },
+  { version: 4, sql: catalogSql },
 ];
 
 /** Result of running migrations. */

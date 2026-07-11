@@ -25,7 +25,7 @@ export class PlaceholderTokenError extends Error {
   constructor(public readonly serverNames: string[]) {
     super(
       `Servers still contain the '${PLACEHOLDER_TOKEN}' placeholder: ${serverNames.join(', ')}. ` +
-        `Edit ~/.localcortex/mcp-servers.json and set real tokens before running.`,
+        `Set real tokens in the Sources tab before running.`,
     );
     this.name = 'PlaceholderTokenError';
   }
@@ -101,7 +101,9 @@ export function serializeForClaude(
  * `mcp_servers.<name>.env={}`. Dotted env keys (e.g. `my.key`) are safe here
  * because the flattener joins them as `mcp_servers.<name>.env.my.key`.
  */
-export function serializeForCodexConfig(servers: ResolvedMcpServers): NonNullable<CodexOptions['config']> {
+export function serializeForCodexConfig(
+  servers: ResolvedMcpServers,
+): NonNullable<CodexOptions['config']> {
   const mcpServers: NonNullable<CodexOptions['config']> = {};
   for (const [name, def] of Object.entries(servers)) {
     mcpServers[name] = {

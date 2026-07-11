@@ -19,8 +19,9 @@ import { RulesRepository } from './db/repositories/rules.js';
 import { RunsRepository } from './db/repositories/runs.js';
 import { HandoffsRepository } from './db/repositories/handoffs.js';
 import { SettingsRepository } from './db/repositories/settings.js';
-import { ensureConfigFile } from './mcp/config-loader.js';
-import { loadMcpServersFile } from './mcp/config-loader.js';
+import { McpServersRepository } from './db/repositories/mcp-servers.js';
+import { AgentsRepository } from './db/repositories/agents.js';
+import { TaskManagersRepository } from './db/repositories/task-managers.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { ConcurrencyQueue } from './scheduler/concurrency.js';
 import { startIngress } from './events/ingress.js';
@@ -36,6 +37,8 @@ import { registerRunsIpc } from './ipc/runs.js';
 import { registerHandoffsIpc } from './ipc/handoffs.js';
 import { registerServersIpc } from './ipc/servers.js';
 import { registerSettingsIpc } from './ipc/settings.js';
+import { registerCatalogIpc } from './ipc/catalog.js';
+import { registerHandoffSetupIpc } from './ipc/handoff-setup.js';
 import { IPC } from '@shared/schemas/ipc-schema';
 import { LifecycleManager } from './mcp/lifecycle.js';
 import { logger, logError } from './observability/logger.js';
@@ -128,16 +131,24 @@ async function bootstrap(): Promise<void> {
   const runsRepo = new RunsRepository(db);
   const handoffsRepo = new HandoffsRepository(db);
   const settingsRepo = new SettingsRepository(db);
+  const mcpServersRepo = new McpServersRepository(db);
+  const agentsRepo = new AgentsRepository(db);
+  const taskManagersRepo = new TaskManagersRepository(db);
   const settings = settingsRepo.get();
 
   // Apply the persisted color scheme before the window mounts so there's no
   // flash of the wrong theme.
   applyAppearance(settings.appearance);
 
-  // 2. MCP config file (write bundled default on first launch).
+  // 2. MCP servers: one-time import from the legacy mcp-servers.json file if it
+  //    still exists (idempotent by name). The DB is now the single source of
+  //    truth; the file is retired. Seeds were inserted by migration 004.
   const appDataRoot = join(homedir(), APP_DATA_DIRNAME);
-  const configPath = join(appDataRoot, MCP_SERVERS_FILENAME);
-  ensureConfigFile(configPath);
+  const legacyConfigPath = join(appDataRoot, MCP_SERVERS_FILENAME);
+  const imported = mcpServersRepo.importFromFile(legacyConfigPath);
+  if (imported > 0) {
+    logger.info(`Imported ${imported} MCP server(s) from legacy mcp-servers.json`);
+  }
 
   // 3. Concurrency queue (shared by scheduler + ingress).
   //    Wire onStart so each run's start (and the current backlog) hits the
@@ -164,8 +175,7 @@ async function bootstrap(): Promise<void> {
     inFlightAborts.add(ac);
     return queue.add(async () => {
       try {
-        const mcpConfig = loadMcpServersFile(configPath);
-        if (!mcpConfig) throw new Error('mcp-servers.json missing');
+        const mcpConfig = mcpServersRepo.getAsConfig();
         return executeRun(
           {
             rulesRepo,
@@ -258,7 +268,17 @@ async function bootstrap(): Promise<void> {
         : undefined,
     ),
   );
-  registerServersIpc({ configPath, getRules: () => rulesRepo.list() });
+  registerServersIpc({ mcpServersRepo, getRules: () => rulesRepo.list() });
+  registerCatalogIpc({ agentsRepo, taskManagersRepo, mcpServersRepo });
+  registerHandoffSetupIpc({
+    settingsRepo,
+    agentsRepo,
+    taskManagersRepo,
+    rulesRepo,
+    mcpServersRepo,
+    onRulesChanged: () =>
+      scheduler?.rescheduleAll(rulesRepo.list(), settingsRepo.get().tickIntervalSeconds),
+  });
   // Re-apply the theme (and any future side-effecting setting) on change so a
   // Settings edit takes effect immediately, with no restart.
   registerSettingsIpc(settingsRepo, (updated) => applyAppearance(updated.appearance));

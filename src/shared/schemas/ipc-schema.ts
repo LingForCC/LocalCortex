@@ -53,6 +53,28 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
 
+  // --- Catalog CRUD (agents, task managers, MCP servers) -------------------
+  AGENTS_LIST: 'agents:list',
+  AGENTS_GET: 'agents:get',
+  AGENTS_CREATE: 'agents:create',
+  AGENTS_UPDATE: 'agents:update',
+  AGENTS_DELETE: 'agents:delete',
+
+  TASK_MANAGERS_LIST: 'task-managers:list',
+  TASK_MANAGERS_GET: 'task-managers:get',
+  TASK_MANAGERS_CREATE: 'task-managers:create',
+  TASK_MANAGERS_UPDATE: 'task-managers:update',
+  TASK_MANAGERS_DELETE: 'task-managers:delete',
+
+  MCP_SERVERS_LIST: 'mcp-servers:list',
+  MCP_SERVERS_GET: 'mcp-servers:get',
+  MCP_SERVERS_UPSERT: 'mcp-servers:upsert',
+  MCP_SERVERS_DELETE: 'mcp-servers:delete',
+
+  // --- Handoff setup --------------------------------------------------------
+  HANDOFF_SETUP_COMPLETE: 'handoff-setup:complete',
+  HANDOFF_SETUP_RESET: 'handoff-setup:reset',
+
   THEME_APPLY: 'theme:apply',
 } as const;
 
@@ -134,6 +156,13 @@ export const UpdateSettingsMessageSchema = z.object({
   codexCliPath: z.string().nullable().optional(),
   /** Explicit path to a local Claude Code CLI. null clears it (auto-detect/default). */
   claudeCliPath: z.string().nullable().optional(),
+  // Handoff specialization — managed by handoff-setup:complete / reset, not the
+  // Settings view directly. Accepted here so they round-trip through the shared
+  // settings patch builder.
+  handoffAgentId: z.string().nullable().optional(),
+  handoffTaskManagerId: z.string().nullable().optional(),
+  handoffBackend: z.enum(['claude', 'codex']).nullable().optional(),
+  handoffRuleId: z.string().nullable().optional(),
 });
 
 /**
@@ -146,3 +175,28 @@ export const UpdateSettingsResultSchema = z.object({
   error: z.string().optional(),
   settings: z.any().optional(),
 });
+
+// --- Catalog: agents, task managers, MCP servers ---------------------------
+
+export const IdSchema = z.object({ id: z.string().min(1) });
+export const NameSchema = z.object({ name: z.string().min(1) });
+
+// --- Handoff setup ---------------------------------------------------------
+
+/** `handoff-setup:complete` — the three onboarding choices. */
+export const HandoffSetupCompleteSchema = z.object({
+  agentId: z.string().min(1),
+  taskManagerId: z.string().min(1),
+  backend: z.enum(['claude', 'codex']),
+});
+
+/** `handoff-setup:complete` result. */
+export const HandoffSetupResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  settings: z.any().optional(),
+  rule: z.any().optional(),
+});
+
+/** Inferred TS type for the handoff-setup:complete result. */
+export type HandoffSetupResult = z.infer<typeof HandoffSetupResultSchema>;

@@ -9,8 +9,17 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/schemas/ipc-schema';
-import type { HandoffPromptPayload } from '@shared/schemas/ipc-schema';
-import type { Rule, Run, AppSettings, RuleWithBookkeeping, Handoff } from '@shared/types';
+import type { HandoffPromptPayload, HandoffSetupResult } from '@shared/schemas/ipc-schema';
+import type {
+  Rule,
+  Run,
+  AppSettings,
+  RuleWithBookkeeping,
+  Handoff,
+  AgentEntry,
+  TaskManagerEntry,
+  McpServerEntry,
+} from '@shared/types';
 import type { CreateHandoff } from '@shared/schemas/handoff-schema';
 import type { UpdateSettingsResult } from './ipc/settings.js';
 
@@ -73,6 +82,48 @@ const api = {
     read: (): Promise<unknown> => ipcRenderer.invoke(IPC.SERVERS_READ),
     validate: (): Promise<{ ok: boolean; errors: string[] }> =>
       ipcRenderer.invoke(IPC.SERVERS_VALIDATE),
+  },
+
+  // --- Catalog CRUD (agents, task managers, MCP servers) -------------------
+  agents: {
+    list: (): Promise<AgentEntry[]> => ipcRenderer.invoke(IPC.AGENTS_LIST),
+    get: (id: string): Promise<AgentEntry | null> => ipcRenderer.invoke(IPC.AGENTS_GET, { id }),
+    create: (input: Omit<AgentEntry, 'createdAt' | 'updatedAt'>): Promise<AgentEntry | null> =>
+      ipcRenderer.invoke(IPC.AGENTS_CREATE, input),
+    update: (input: Omit<AgentEntry, 'createdAt' | 'updatedAt'>): Promise<AgentEntry | null> =>
+      ipcRenderer.invoke(IPC.AGENTS_UPDATE, input),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AGENTS_DELETE, { id }),
+  },
+  taskManagers: {
+    list: (): Promise<TaskManagerEntry[]> => ipcRenderer.invoke(IPC.TASK_MANAGERS_LIST),
+    get: (id: string): Promise<TaskManagerEntry | null> =>
+      ipcRenderer.invoke(IPC.TASK_MANAGERS_GET, { id }),
+    create: (
+      input: Omit<TaskManagerEntry, 'createdAt' | 'updatedAt'>,
+    ): Promise<TaskManagerEntry | null> => ipcRenderer.invoke(IPC.TASK_MANAGERS_CREATE, input),
+    update: (
+      input: Omit<TaskManagerEntry, 'createdAt' | 'updatedAt'>,
+    ): Promise<TaskManagerEntry | null> => ipcRenderer.invoke(IPC.TASK_MANAGERS_UPDATE, input),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.TASK_MANAGERS_DELETE, { id }),
+  },
+  mcpServers: {
+    list: (): Promise<McpServerEntry[]> => ipcRenderer.invoke(IPC.MCP_SERVERS_LIST),
+    get: (name: string): Promise<McpServerEntry | null> =>
+      ipcRenderer.invoke(IPC.MCP_SERVERS_GET, { name }),
+    upsert: (input: Omit<McpServerEntry, 'createdAt' | 'updatedAt'>): Promise<McpServerEntry> =>
+      ipcRenderer.invoke(IPC.MCP_SERVERS_UPSERT, input),
+    delete: (name: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.MCP_SERVERS_DELETE, { name }),
+  },
+
+  // --- Handoff setup --------------------------------------------------------
+  handoffSetup: {
+    complete: (input: {
+      agentId: string;
+      taskManagerId: string;
+      backend: 'claude' | 'codex';
+    }): Promise<HandoffSetupResult> => ipcRenderer.invoke(IPC.HANDOFF_SETUP_COMPLETE, input),
+    reset: (): Promise<HandoffSetupResult> => ipcRenderer.invoke(IPC.HANDOFF_SETUP_RESET),
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),

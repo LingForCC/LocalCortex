@@ -41,6 +41,7 @@ async function createRule(window: import('@playwright/test').Page, rule: Rule): 
 
 test.describe('Event ingress', () => {
   test('T-E2: a matching event fires the rule and a run appears', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
 
     // Create an enabled event rule whose eventType matches what we'll POST.
@@ -74,6 +75,7 @@ test.describe('Event ingress', () => {
   });
 
   test('T-E3: a filter that does not match yields matched:0 and no run', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
 
     // A rule whose filter requires workdir under /expected/* — we POST a

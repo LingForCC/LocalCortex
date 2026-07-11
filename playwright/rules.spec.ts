@@ -16,7 +16,14 @@ import type { Page } from '@playwright/test';
 
 /** Click a sidebar nav button by its label. */
 async function gotoTab(window: Page, label: string): Promise<void> {
+  // Ensure the shell is fully rendered before clicking (the onboarding→shell
+  // transition is async; clicking too early can miss the handler).
+  await window.getByRole('button', { name: 'Home' }).waitFor({ state: 'visible' });
   await window.getByRole('button', { name: label }).click();
+  // Wait for the tab content to render so subsequent locators are stable.
+  if (label === 'Rules') {
+    await expect(window.getByRole('button', { name: 'New rule' })).toBeVisible();
+  }
 }
 
 /**
@@ -60,6 +67,7 @@ async function createRuleViaUi(
 
 test.describe('Rules CRUD (R-E1..R-E5)', () => {
   test('R-E1: create a rule via the UI and it persists across reload', async ({ app }) => {
+    await app.completeOnboarding();
     const created = await createRuleViaUi(app.window, { name: 'Persisted rule' });
 
     // Row appears in the table immediately.
@@ -67,15 +75,20 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
 
     // Relaunch the app and confirm the row survived (DB-backed).
     await app.relaunch();
+    await gotoTab(app.window, 'Rules');
     await expect(app.window.getByRole('row', { name: /Persisted rule/ })).toBeVisible();
     expect(created.name).toBe('Persisted rule');
   });
 
   test('R-E2: edit a rule and the row updates', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
     await createRuleViaUi(window, { name: 'Before edit' });
 
-    await window.getByRole('button', { name: 'Edit' }).click();
+    await window
+      .getByRole('row', { name: /Before edit/ })
+      .getByRole('button', { name: 'Edit' })
+      .click();
     await window.getByLabel('Name').fill('After edit');
     await window.getByRole('button', { name: 'Save' }).click();
 
@@ -84,6 +97,7 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
   });
 
   test('R-E3: toggling enabled flips and persists across reload', async ({ app }) => {
+    await app.completeOnboarding();
     await createRuleViaUi(app.window, { name: 'Toggle me' });
 
     // Resolve the switch lazily off app.window so it stays valid after relaunch.
@@ -95,21 +109,28 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
 
     // Persist across relaunch (app.window is rebound after relaunch).
     await app.relaunch();
+    await gotoTab(app.window, 'Rules');
     await expect(toggle()).toHaveAttribute('aria-checked', 'false');
   });
 
   test('R-E4: delete a rule removes the row', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
     // Auto-accept the window.confirm() the Delete button triggers.
     window.once('dialog', (d) => void d.accept());
     await createRuleViaUi(window, { name: 'Delete me' });
 
-    await window.getByRole('button', { name: 'Delete' }).click();
+    // Scope Delete to the specific row (the handoff-auto rule also has a Delete).
+    await window
+      .getByRole('row', { name: /Delete me/ })
+      .getByRole('button', { name: 'Delete' })
+      .click();
 
     await expect(window.getByRole('row', { name: /Delete me/ })).toHaveCount(0);
   });
 
   test('R-E5: empty rule text shows inline validation and saves nothing', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
     await gotoTab(window, 'Rules');
     await window.getByRole('button', { name: 'New rule' }).click();
@@ -120,14 +141,18 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
     // The client-side guard renders a destructive error paragraph.
     await expect(window.getByText(/required/i)).toBeVisible();
 
-    // Cancel back to the list and confirm no row was added.
+    // Cancel back to the list. The handoff-auto rule from onboarding is still
+    // there, so we assert the editor is gone (no Create/Cancel button) rather
+    // than the old "No rules yet" empty state.
     await window.getByRole('button', { name: 'Cancel' }).click();
-    await expect(window.getByText(/No rules yet/i)).toBeVisible();
+    await expect(window.getByRole('button', { name: 'New rule' })).toBeVisible();
+    await expect(window.getByText(/required/i)).toHaveCount(0);
   });
 });
 
 test.describe('Run-now (R-E6)', () => {
   test('Run-now enqueues and a run row appears', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
     const { ruleId } = await createRuleViaUi(window, { name: 'Run me' });
 

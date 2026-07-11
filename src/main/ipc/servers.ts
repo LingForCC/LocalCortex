@@ -1,36 +1,36 @@
 /**
- * IPC handlers for the `servers:*` channels — read/validate mcp-servers.json.
+ * IPC handlers for the `servers:*` channels — read/validate MCP servers.
  *
  * Spec: docs/architecture.md §4 (ipc/servers.ts), docs/mcp-servers.md.
  *
  * Lets the renderer list configured server names, flag those still holding the
- * `<your-token-here>` placeholder, and re-read the file after the user edits it.
+ * `<your-token-here>` placeholder, and re-read the servers after the user edits
+ * them. All data now comes from the `mcp_servers` DB table (via the repository)
+ * instead of the retired ~/.localcortex/mcp-servers.json file.
  */
 
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/schemas/ipc-schema';
 import { listServerNames } from '../mcp/resolver.js';
 import { serversWithPlaceholder } from '../mcp/config.js';
-import { loadMcpServersFile } from '../mcp/config-loader.js';
 import { resolveMcpServers } from '../mcp/resolver.js';
 import type { Rule } from '@shared/types';
+import type { McpServersRepository } from '../db/repositories/mcp-servers.js';
 
 export interface ServersIpcDeps {
-  /** Absolute path to ~/.localcortex/mcp-servers.json. */
-  configPath: string;
+  /** The MCP servers repository (DB-backed). */
+  mcpServersRepo: McpServersRepository;
   /** All rules — used to flag placeholder tokens on servers actually in use. */
   getRules: () => Array<Pick<Rule, 'mcpServers' | 'id'>>;
 }
 
 export function registerServersIpc(deps: ServersIpcDeps): void {
   ipcMain.handle(IPC.SERVERS_READ, async () => {
-    const cfg = loadMcpServersFile(deps.configPath);
-    return cfg;
+    return deps.mcpServersRepo.getAsConfig();
   });
 
   ipcMain.handle(IPC.SERVERS_LIST, async () => {
-    const cfg = loadMcpServersFile(deps.configPath);
-    if (!cfg) return { names: [], placeholders: [] };
+    const cfg = deps.mcpServersRepo.getAsConfig();
     const names = listServerNames(cfg);
     // Build a ResolvedMcpServers-shaped map (command/args/env) so the placeholder
     // check can scan env values.
@@ -48,8 +48,7 @@ export function registerServersIpc(deps: ServersIpcDeps): void {
 
   ipcMain.handle(IPC.SERVERS_VALIDATE, async () => {
     // Validate that every rule-referenced server name exists and has no placeholder.
-    const cfg = loadMcpServersFile(deps.configPath);
-    if (!cfg) return { ok: false, errors: ['mcp-servers.json not found'] };
+    const cfg = deps.mcpServersRepo.getAsConfig();
     const errors: string[] = [];
     for (const rule of deps.getRules()) {
       try {

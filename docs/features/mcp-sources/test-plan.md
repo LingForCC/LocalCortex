@@ -1,96 +1,63 @@
 # MCP Sources — Test Plan
 
-Covers the **config-file loader**, **name resolution**, **per-backend serialization** (Claude + Codex TOML), **placeholder-token detection**, and the **default-config provisioning** on first launch.
+Covers the **DB-backed `mcp_servers` table** (replacing the former config file),
+**CRUD operations**, **legacy file import**, **name resolution**, **per-backend
+serialization** (Claude + Codex TOML), and **placeholder-token detection**.
 
 ---
 
 ## In scope
-- `parseConfigFile` / `loadMcpServersFile` / `ensureConfigFile` (read, validate, first-launch write).
+- `McpServersRepository`: seeding, CRUD (upsert/delete), `getAsConfig()`, placeholder detection, legacy `importFromFile`.
+- `parseConfigFile` (retained for legacy import).
 - `resolveMcpServers` (name → spawn config; undefined-name error).
 - `serializeForClaude` / `serializeForCodex` (+ placeholder check).
-- The bundled default config content.
-- `servers:list` / `servers:validate` IPC handlers.
+- `servers:list` / `servers:read` / `servers:validate` IPC handlers.
+- `mcp-servers:list/get/upsert/delete` catalog IPC handlers.
 
 ## Out of scope
 - Actually spawning MCP server processes → exercised only via real agent runs (see [Agent backends](../agent-backends/test-plan.md)).
 
 ---
 
-## Test types
-| Type | Tool | Where |
-| --- | --- | --- |
-| Unit (pure logic + temp FS) | Vitest | `src/**/*.test.ts` |
-| E2E | Playwright (Sources view) | `playwright/sources.spec.ts` |
-| Manual | operator | — |
-
----
-
 ## Unit tests
 
-### Config loader — `src/main/mcp/config-loader.test.ts`
+### `mcp_servers` repository — `src/main/db/repositories/mcp-servers.test.ts`
 **Status:** ✅ covered — 10 cases.
 
 | # | Case | Expected |
 | --- | --- | --- |
-| M-L1 | parses well-formed config | ✅ existing |
-| M-L2 | applies defaults for missing `args`/`env` | ✅ existing |
-| M-L3 | rejects invalid JSON | ✅ existing |
-| M-L4 | rejects non-stdio transport (schema violation) | ✅ existing |
-| M-L5 | round-trips serialize ↔ parse | ✅ existing |
-| M-L6 | `loadMcpServersFile` returns null when absent | ✅ existing |
-| M-L7 | `loadMcpServersFile` loads + parses existing file | ✅ existing |
-| M-L8 | `ensureConfigFile` writes default with `0600` perms | ✅ existing |
-| M-L9 | `ensureConfigFile` does not overwrite existing | ✅ existing |
-| M-L10 | `ensureConfigFile` is idempotent | ✅ existing |
+| M-R1 | seeds v1 defaults on migration | github, gitlab, todoist, omnifocus present |
+| M-R2 | marks seeded servers as builtin | `isBuiltin === true` |
+| M-R3 | seeds placeholder tokens for github/gitlab/todoist | placeholderNames includes them; not omnifocus |
+| M-R4 | upserts a new server | row created + retrievable |
+| M-R5 | upsert overwrites an existing server | fields updated |
+| M-R6 | deletes a server | row removed |
+| M-R7 | `getAsConfig` returns McpServersFile-shaped object | resolver-compatible shape |
+| M-R8 | `getAsConfig` includes custom servers | upserted server visible |
+| M-R9 | legacy import: overwrites seeds with real tokens | placeholder cleared, custom server added, idempotent |
+| M-R10 | legacy import: returns 0 for missing/malformed file | seeds intact |
 
 ### Resolver — `src/main/mcp/resolver.test.ts`
-**Status:** ✅ covered — 5 cases.
-
-| # | Case | Expected |
-| --- | --- | --- |
-| M-R1 | resolves each name to a deep copy | ✅ existing |
-| M-R2 | mutation does not leak to source config | ✅ existing |
-| M-R3 | throws `UndefinedMcpServerError` naming server + rule | ✅ existing |
-| M-R4 | empty `mcpServers` → empty resolved | ✅ existing |
-| M-R5 | `listServerNames` returns defined names | ✅ existing |
+**Status:** ✅ covered — 5 cases (unchanged; accepts the DB-sourced shape).
 
 ### Serializer + placeholder check — `src/main/mcp/config.test.ts`
-**Status:** ✅ covered — 10 cases.
+**Status:** ✅ covered — 12 cases (unchanged logic).
 
-| # | Case | Expected |
-| --- | --- | --- |
-| M-S1 | `serializeForClaude` produces `options.mcpServers` shape | ✅ existing |
-| M-S2 | Claude output is a deep copy | ✅ existing |
-| M-S3 | `serializeForCodex` emits `[mcp_servers."name"]` + tables + `approval_policy="never"` | ✅ existing |
-| M-S4 | Codex omits env table when env empty | ✅ existing |
-| M-S5 | Codex escapes quotes/backslashes in values | ✅ existing |
-| M-S6 | Codex quotes bare-unsafe env keys (e.g. `dotted.key`) | ✅ existing |
-| M-S7 | Codex honors custom approval policy | ✅ existing |
-| M-S8 | `serversWithPlaceholder` lists offenders | ✅ existing |
-| M-S9 | `assertNoPlaceholders` throws listing offenders | ✅ existing |
-| M-S10 | `assertNoPlaceholders` passes when all tokens real | ✅ existing |
-
-### Default config — `src/main/mcp/default-config.ts`
-**Status:** partially covered (M-L8 asserts the three names + placeholder). **Add:**
-
-| # | Case | Expected |
-| --- | --- | --- |
-| M-D1 | default contains exactly `github`, `gitlab`, `todoist` | (covered via M-L8) |
-| M-D2 | `gitlab.env.GITLAB_API_URL` defaults to `https://gitlab.com/api/v4` | **add** |
+### Legacy config parser — `src/main/mcp/config-loader.test.ts`
+**Status:** ✅ covered — 4 cases (parse-only, retained for import).
 
 ---
 
-## IPC handlers — `src/main/ipc/servers.ts`
+## IPC handlers — `src/main/ipc/servers.ts` + `src/main/ipc/catalog.ts`
 **Status:** not unit-tested (Electron-coupled). Verify via E2E/manual.
 
 | # | Case | Expected |
 | --- | --- | --- |
 | M-I1 | `servers:list` returns names + placeholders | `{ names, placeholders }` |
-| M-I2 | `servers:read` returns the parsed file | config object |
+| M-I2 | `servers:read` returns the config object | McpServersFile shape |
 | M-I3 | `servers:validate` flags a rule referencing an undefined server | `{ ok:false, errors:[...] }` |
-| M-I4 | `servers:validate` flags a placeholder token in a used server | error mentions the rule + server |
-| M-I5 | `servers:validate` passes when all good | `{ ok:true, errors:[] }` |
-| M-I6 | missing config file → `servers:list` returns empty | `{ names:[], placeholders:[] }` |
+| M-I4 | `mcp-servers:upsert` creates/updates a server | row persisted |
+| M-I5 | `mcp-servers:delete` removes a non-builtin server | row removed |
 
 ---
 
@@ -98,13 +65,16 @@ Covers the **config-file loader**, **name resolution**, **per-backend serializat
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab before filling tokens | chips show "· placeholder" ✅ existing (`playwright/sources.spec.ts`) |
-| M-E2 | Refresh picks up edits | Edit file externally; click Refresh | updated list/raw config ✅ existing (`playwright/sources.spec.ts`) |
-| M-E3 | Adding a new server + referencing it works | Add `jira-acme`, reference in a rule, run | agent can call jira tools — **manual** (needs a live agent run) |
-| M-E4 | First-launch provisioning | delete `~/.localcortex/mcp-servers.json`, relaunch app | file recreated with `0600` perms ✅ existing (`playwright/sources.spec.ts`) |
+| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab | servers shown, placeholders flagged |
+| M-E2 | Form mode: add a server | Fill form → Save | server appears in list |
+| M-E3 | JSON-paste mode: add a server | Paste JSON block → Save | server parsed and persisted |
+| M-E4 | Edit a builtin server | Edit github → change token → Save | token updated |
+| M-E5 | Legacy import on upgrade | Place a real `mcp-servers.json` → launch app | servers imported with tokens preserved |
+| M-E6 | Adding a server + referencing it in a rule works | Add server, reference in rule, run | agent can call that server's tools — manual |
 
 ---
 
 ## Related
 - [MCP sources README](./README.md)
+- [Handoff setup README](../handoff-setup/README.md)
 - [design: mcp-servers.md](../../mcp-servers.md)

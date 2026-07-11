@@ -13,8 +13,7 @@ import { isExecutablePath } from '../agent/cli-resolver.js';
 
 /** Discriminated result returned over `settings:update`. */
 export type UpdateSettingsResult =
-  | { ok: true; settings: AppSettings }
-  | { ok: false; error: string };
+  { ok: true; settings: AppSettings } | { ok: false; error: string };
 
 /**
  * Optional hook invoked after a *successful* `settings:update`. The main
@@ -67,6 +66,21 @@ export function registerSettingsIpc(
     }
     if (parsed.claudeCliPath !== undefined) {
       patch.claudeCliPath = parsed.claudeCliPath ?? '';
+    }
+    // Handoff specialization fields are normally managed by handoff-setup IPC
+    // (which uses clearHandoffFields for reset). Thread them through here too
+    // for direct settings edits: a non-null string sets, null clears to empty.
+    if (parsed.handoffAgentId !== undefined) {
+      patch.handoffAgentId = parsed.handoffAgentId ?? '';
+    }
+    if (parsed.handoffTaskManagerId !== undefined) {
+      patch.handoffTaskManagerId = parsed.handoffTaskManagerId ?? '';
+    }
+    if (parsed.handoffBackend !== undefined && parsed.handoffBackend !== null) {
+      patch.handoffBackend = parsed.handoffBackend;
+    }
+    if (parsed.handoffRuleId !== undefined) {
+      patch.handoffRuleId = parsed.handoffRuleId ?? '';
     }
     const settings = settingsRepo.update(patch);
     // Re-apply side-effecting settings (e.g. nativeTheme) on change.

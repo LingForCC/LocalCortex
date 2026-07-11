@@ -16,6 +16,7 @@ Global defaults that apply across all rules. The **Settings** tab exposes six kn
 | **Ingress shared secret** | none (unset) | If set, every POST to the event ingress must carry `x-localcortex-secret: <value>` or get HTTP 401. |
 | **Codex CLI path** | none (auto-detect) | Explicit path to a locally installed `codex` binary. Leave blank to auto-detect on `PATH` (falls back to the SDK's bundled binary). |
 | **Claude Code CLI path** | none (auto-detect) | Explicit path to a locally installed `claude` binary. Same resolution semantics as the Codex field. |
+| **Handoff setup** | unset (onboarding required) | The three onboarding choices (`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`) plus the auto-created rule id (`handoffRuleId`). Managed by the [handoff setup](../handoff-setup/README.md) wizard; shown read-only in the Settings view with a reset button. |
 
 Settings persist in the `app_settings` table and survive restarts.
 

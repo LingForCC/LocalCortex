@@ -54,6 +54,22 @@ export interface AppFixture {
    * `electronApp` / `window` fields in place and awaits the remounted root.
    */
   relaunch: () => Promise<void>;
+  /**
+   * Complete the handoff onboarding wizard via the UI (select agent → task
+   * manager → backend → Finish) so the shell is reachable. A fresh DB shows
+   * the wizard before anything else, so specs that test the shell (Rules,
+   * Settings, Sources, …) must call this first. Idempotent: if the shell is
+   * already showing, it's a no-op.
+   *
+   * @param opts.agent     Agent id to select (default: the first builtin, 'zcode').
+   * @param opts.taskManager Task manager id (default: the first builtin, 'omnifocus').
+   * @param opts.backend   Review-rule backend (default: 'claude').
+   */
+  completeOnboarding: (opts?: {
+    agent?: string;
+    taskManager?: string;
+    backend?: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -109,6 +125,45 @@ export const test = base.extend<{ app: AppFixture }>({
         const next = await launchApp(home);
         electronApp = next.electronApp;
         window = next.window;
+      },
+      completeOnboarding: async (opts?: {
+        agent?: string;
+        taskManager?: string;
+        backend?: string;
+      }) => {
+        const agent = opts?.agent ?? 'zcode';
+        const taskManager = opts?.taskManager ?? 'omnifocus';
+        const backend = opts?.backend ?? 'Claude';
+
+        // If the shell is already showing (setup complete), do nothing.
+        // Detect the wizard by the "Welcome to LocalCortex" heading.
+        const isOnboarding = await window
+          .getByRole('heading', { name: 'Welcome to LocalCortex' })
+          .isVisible()
+          .catch(() => false);
+        if (!isOnboarding) return;
+
+        // Step 1: pick agent.
+        await window.getByRole('radio', { name: new RegExp(`^${agent}$`, 'i') }).click();
+        await window.getByRole('button', { name: 'Next' }).click();
+
+        // Step 2: pick task manager.
+        await window.getByRole('radio', { name: new RegExp(`^${taskManager}$`, 'i') }).click();
+        await window.getByRole('button', { name: 'Next' }).click();
+
+        // Step 3: pick backend (match on the card's aria-label, which is the
+        // backend label string, e.g. "Claude (Claude Code SDK)").
+        await window.getByRole('radio', { name: new RegExp(`^${backend}`, 'i') }).click();
+        await window.getByRole('button', { name: 'Next' }).click();
+
+        // Step 4: review & Finish.
+        await window.getByRole('button', { name: 'Finish' }).click();
+
+        // Wait for the shell to fully render: the sidebar appears AND the Home
+        // tab content is visible. Waiting only for the sidebar button can race
+        // with the React re-render after onboarding completes.
+        await expect(window.getByRole('button', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
+        await expect(window.getByText('Handoff setup')).toBeVisible({ timeout: 10_000 });
       },
     };
 

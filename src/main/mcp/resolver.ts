@@ -21,7 +21,8 @@ export class UndefinedMcpServerError extends Error {
     public readonly ruleId: string,
   ) {
     super(
-      `Server '${serverName}' is not defined in mcp-servers.json (referenced by rule '${ruleId}').`,
+      `Server '${serverName}' is not defined (referenced by rule '${ruleId}'). ` +
+        `Add it in the Sources tab.`,
     );
     this.name = 'UndefinedMcpServerError';
   }

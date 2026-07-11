@@ -18,6 +18,7 @@ async function gotoTab(window: import('@playwright/test').Page, label: string): 
 
 test.describe('Run history observability', () => {
   test('O-E1: a run appears after Run-now; O-E4: error run shows its message', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
 
     // Create + run a rule (no credentials → the run records status `error`).

@@ -1,23 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import {
-  parseConfigFile,
-  serializeConfigFile,
-  loadMcpServersFile,
-  ensureConfigFile,
-} from './config-loader.js';
-import { PLACEHOLDER_TOKEN } from '@shared/constants.js';
+import { describe, it, expect } from 'vitest';
+import { parseConfigFile } from './config-loader.js';
 
-let dir: string;
-beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'lc-mcp-'));
-});
-afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
-});
-
+/**
+ * The file-based mcp-servers.json has been retired — server configs now live in
+ * the `mcp_servers` DB table. This module retains only `parseConfigFile`, used
+ * by McpServersRepository.importFromFile for the one-time legacy import. The
+ * round-trip / load / ensure tests have moved to the repository's own tests.
+ */
 describe('parseConfigFile', () => {
   it('parses a well-formed config', () => {
     const cfg = parseConfigFile(
@@ -46,69 +35,5 @@ describe('parseConfigFile', () => {
     expect(() =>
       parseConfigFile(JSON.stringify({ servers: { x: { transport: 'http', command: 'c' } } })),
     ).toThrow();
-  });
-});
-
-describe('serializeConfigFile / load round-trip', () => {
-  it('round-trips through JSON', () => {
-    const original = {
-      servers: {
-        gh: { transport: 'stdio', command: 'npx', args: ['a'], env: { T: 'v' } },
-      },
-    };
-    const cfg1 = parseConfigFile(JSON.stringify(original));
-    const text = serializeConfigFile(cfg1);
-    const cfg2 = parseConfigFile(text);
-    expect(cfg2).toEqual(cfg1);
-  });
-});
-
-describe('loadMcpServersFile', () => {
-  it('returns null when the file does not exist', () => {
-    expect(loadMcpServersFile(join(dir, 'nope.json'))).toBeNull();
-  });
-
-  it('loads and parses an existing file', () => {
-    const p = join(dir, 'c.json');
-    writeFileSync(p, JSON.stringify({ servers: { x: { transport: 'stdio', command: 'npx' } } }));
-    const cfg = loadMcpServersFile(p);
-    expect(cfg?.servers['x']?.command).toBe('npx');
-  });
-});
-
-describe('ensureConfigFile', () => {
-  it('writes the bundled default with 0600 perms when missing', () => {
-    const p = join(dir, 'nested', 'mcp-servers.json');
-    const res = ensureConfigFile(p);
-    expect(res.created).toBe(true);
-
-    const cfg = parseConfigFile(readFileSync(p, 'utf8'));
-    // Three v1 servers present.
-    expect(Object.keys(cfg.servers).sort()).toEqual(['github', 'gitlab', 'todoist']);
-    // Placeholders not filled in by default.
-    expect(cfg.servers['github']?.env['GITHUB_PERSONAL_ACCESS_TOKEN']).toBe(PLACEHOLDER_TOKEN);
-
-    const mode = statSync(p).mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
-
-  it('does not overwrite an existing file', () => {
-    const p = join(dir, 'mcp-servers.json');
-    writeFileSync(
-      p,
-      JSON.stringify({
-        servers: { custom: { transport: 'stdio', command: 'my-cmd' } },
-      }),
-    );
-    const res = ensureConfigFile(p);
-    expect(res.created).toBe(false);
-    expect(Object.keys(res.config.servers)).toEqual(['custom']);
-  });
-
-  it('is idempotent', () => {
-    const p = join(dir, 'mcp-servers.json');
-    ensureConfigFile(p);
-    const second = ensureConfigFile(p);
-    expect(second.created).toBe(false);
   });
 });

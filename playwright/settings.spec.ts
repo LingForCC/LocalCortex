@@ -19,6 +19,7 @@ async function gotoTab(window: import('@playwright/test').Page, label: string): 
 
 test.describe('Global settings', () => {
   test('changing tick interval + concurrency persists across reload', async ({ app }) => {
+    await app.completeOnboarding();
     await gotoTab(app.window, 'Settings');
 
     const tick = app.window.getByLabel('Default tick interval (seconds, ≥ 300)');
@@ -43,6 +44,7 @@ test.describe('Global settings', () => {
   });
 
   test('tick interval below the 300s floor is rejected and does not persist', async ({ app }) => {
+    await app.completeOnboarding();
     await gotoTab(app.window, 'Settings');
 
     const tick = app.window.getByLabel('Default tick interval (seconds, ≥ 300)');
@@ -61,6 +63,7 @@ test.describe('Global settings', () => {
 
 test.describe('Appearance', () => {
   test('changing appearance persists across reload', async ({ app }) => {
+    await app.completeOnboarding();
     await gotoTab(app.window, 'Settings');
 
     const appearance = app.window.getByLabel('Appearance');
@@ -77,6 +80,7 @@ test.describe('Appearance', () => {
   });
 
   test('selecting dark applies the dark color scheme immediately', async ({ app }) => {
+    await app.completeOnboarding();
     await gotoTab(app.window, 'Settings');
 
     const appearance = app.window.getByLabel('Appearance');

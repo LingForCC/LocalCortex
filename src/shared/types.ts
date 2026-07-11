@@ -24,6 +24,9 @@ import type {
 import type { RunSchema } from './schemas/run-schema.js';
 import type { HandoffSchema } from './schemas/handoff-schema.js';
 import type { AppSettingsSchema } from './schemas/settings-schema.js';
+import type { AgentSchema } from './schemas/agent-schema.js';
+import type { TaskManagerSchema } from './schemas/task-manager-schema.js';
+import type { McpServerEntrySchema } from './schemas/mcp-server-schema.js';
 
 // --- Rule model (rule-config-schema.md §10) --------------------------------
 
@@ -102,3 +105,16 @@ export type Handoff = z.infer<typeof HandoffSchema>;
 // --- Global settings (architecture.md §6.4, §6.5) --------------------------
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
+
+// --- Catalog: agents, task managers, MCP servers ----------------------------
+// DB-backed catalogs for the handoff specialization (migration 004). All three
+// are seeded on first run and CRUD-able in-app.
+
+/** A coding-agent catalog row (event source). */
+export type AgentEntry = z.infer<typeof AgentSchema>;
+
+/** A task-manager catalog row (sink layer). */
+export type TaskManagerEntry = z.infer<typeof TaskManagerSchema>;
+
+/** An MCP server catalog row (replaces the old mcp-servers.json file). */
+export type McpServerEntry = z.infer<typeof McpServerEntrySchema>;

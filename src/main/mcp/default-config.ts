@@ -1,20 +1,25 @@
 /**
- * Bundled default mcp-servers.json, written to ~/.localcortex/mcp-servers.json
- * on first launch if the file does not exist.
+ * Bundled default MCP server list.
  *
- * Spec: docs/mcp-servers.md §3 — the three v1 servers with empty token
- * placeholders the user replaces. (The bundled OmniFocus JXA sink has been
- * removed; configure any task manager as an external MCP server in the file.)
+ * Historically written to ~/.localcortex/mcp-servers.json on first launch by
+ * `ensureConfigFile`. The file has been retired — MCP server configs now live
+ * in the `mcp_servers` DB table, seeded by migration 004
+ * (`src/main/db/migrations/004_catalog.sql`). The seed data there is the
+ * authoritative default.
+ *
+ * This module is retained as a reference of the original v1 defaults and for
+ * any test that wants to assert against the same shape. No production code path
+ * imports it.
  */
 
 import type { McpServersFile } from '@shared/types';
 import { PLACEHOLDER_TOKEN } from '@shared/constants';
 
 /**
- * Build the default config. No parameters: the default ships only
- * token-placeholder servers resolved from constants. Any sink (OmniFocus,
- * Todoist, etc.) is configured by the user as an external MCP server in the
- * written file.
+ * Build the default config. The three v1 servers with empty token placeholders.
+ * The user replaces these via the Sources tab (DB-backed CRUD).
+ *
+ * @deprecated The DB seed in migration 004 is the authoritative default now.
  */
 export function buildDefaultConfig(): McpServersFile {
   return {

@@ -1,84 +1,112 @@
 /**
- * E2E for MCP Sources (docs/features/mcp-sources/test-plan.md M-E1/E2/E4).
+ * E2E for MCP Sources (docs/features/mcp-sources/test-plan.md — DB-backed UI).
  *
- * The fixture's isolated HOME starts empty, so `ensureConfigFile` provisions a
- * fresh default ~/.localcortex/mcp-servers.json on launch with the three v1
- * servers (github, gitlab, todoist), each still carrying the
- * `<your-token-here>` placeholder.
+ * The Sources tab is now a CRUD table over the `mcp_servers` DB table (replacing
+ * the old file viewer). These tests cover: seeded servers + placeholder flags
+ * (HS-E8), adding via form mode (HS-E9), adding via JSON-paste mode (HS-E10),
+ * and editing a builtin server (HS-E11).
+ *
+ * The fixture's isolated HOME starts empty, so migration 004 seeds the defaults
+ * (github, gitlab, todoist, omnifocus) on first launch.
  */
 
 import { test, expect } from './fixtures/app';
-import { join } from 'node:path';
-import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from 'node:fs';
+import type { Page } from '@playwright/test';
 
 /** Click a sidebar nav button by its label. */
-async function gotoTab(window: import('@playwright/test').Page, label: string): Promise<void> {
+async function gotoTab(window: Page, label: string): Promise<void> {
+  await window.getByRole('button', { name: 'Home' }).waitFor({ state: 'visible' });
   await window.getByRole('button', { name: label }).click();
 }
 
-/** Path to the isolated mcp-servers.json for a given HOME. */
-function configPath(home: string): string {
-  return join(home, '.localcortex', 'mcp-servers.json');
-}
-
-test.describe('MCP sources', () => {
-  test('M-E1: default servers are provisioned and placeholders flagged', async ({ app }) => {
+test.describe('MCP sources (DB-backed CRUD)', () => {
+  test('HS-E8: seeded servers listed + placeholder tokens flagged', async ({ app }) => {
+    await app.completeOnboarding();
     const { window } = app;
     await gotoTab(window, 'Sources');
 
-    // The three token-bearing servers render with a "· placeholder" suffix.
-    for (const name of ['github', 'gitlab', 'todoist']) {
-      await expect(window.getByText(`${name} · placeholder`)).toBeVisible();
+    // Each seeded server name should be visible.
+    for (const name of ['github', 'gitlab', 'todoist', 'omnifocus']) {
+      await expect(window.getByText(name, { exact: true })).toBeVisible();
     }
+
+    // The three token-bearing servers show a Placeholder badge.
+    await expect(window.getByText('Placeholder').first()).toBeVisible();
   });
 
-  test('M-E2: Refresh picks up edits made to the file out of band', async ({ app }) => {
-    const { window, home } = app;
+  test('HS-E9: add a server via form mode', async ({ app }) => {
+    await app.completeOnboarding();
+    const { window } = app;
     await gotoTab(window, 'Sources');
-    // Wait for the initial load to settle.
-    await expect(window.getByText('github · placeholder')).toBeVisible();
 
-    // Append a brand-new server entry by rewriting the config file.
-    const path = configPath(home);
-    const cfg = JSON.parse(readFileSync(path, 'utf8'));
-    cfg.servers['jira-acme'] = {
-      transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '@example/jira-mcp'],
-      env: { JIRA_TOKEN: 'real-token' },
-    };
-    writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    await window.getByRole('button', { name: 'Add server' }).click();
+    await window.getByRole('button', { name: 'Form', exact: true }).click();
 
-    await window.getByRole('button', { name: 'Refresh' }).click();
+    await window.getByLabel('Name').fill('custom-form');
+    await window.getByLabel('Command').fill('npx');
+    await window.getByLabel('Args (one per line)').fill('-y\n@modelcontextprotocol/server-github');
+    await window.getByRole('button', { name: 'Add env var' }).click();
+    await window.locator('input[placeholder="KEY"]').first().fill('MY_TOKEN');
+    await window.locator('input[placeholder="value"]').first().fill('tok_real');
 
-    // The new server appears as a bare chip (real token → no placeholder).
-    await expect(window.getByText('jira-acme', { exact: true })).toBeVisible();
-    await expect(window.getByText('jira-acme · placeholder')).toHaveCount(0);
+    await window.getByRole('button', { name: 'Save' }).click();
 
-    // And it shows up in the raw config panel.
-    await expect(window.locator('pre', { hasText: 'jira-acme' })).toBeVisible();
+    await expect(window.getByText('custom-form', { exact: true })).toBeVisible();
   });
 
-  test('M-E4: deleting the config then relaunching recreates it with 0600 perms', async ({
-    app,
-  }) => {
-    const { home } = app;
-    const path = configPath(home);
-    expect(existsSync(path)).toBe(true);
+  test('HS-E10: add a server via JSON-paste mode', async ({ app }) => {
+    await app.completeOnboarding();
+    const { window } = app;
+    await gotoTab(window, 'Sources');
 
-    unlinkSync(path);
-    expect(existsSync(path)).toBe(false);
+    await window.getByRole('button', { name: 'Add server' }).click();
+    await window.getByRole('button', { name: 'JSON', exact: true }).click();
 
-    // Relaunch under the same HOME → ensureConfigFile re-provisions the default.
-    await app.relaunch();
+    await window.getByLabel('Name').fill('custom-json');
+    await window.getByLabel('Paste server JSON').fill(
+      JSON.stringify(
+        {
+          command: 'node',
+          args: ['server.js'],
+          env: { MY_API_KEY: 'key_real' },
+        },
+        null,
+        2,
+      ),
+    );
 
-    await expect.poll(async () => existsSync(path), { timeout: 10_000 }).toBe(true);
+    await window.getByRole('button', { name: 'Save' }).click();
 
-    const perms = statSync(path).mode & 0o777;
-    expect(perms).toBe(0o600);
+    await expect(window.getByText('custom-json', { exact: true })).toBeVisible();
+  });
 
-    // The recreated file still parses and lists the three defaults.
-    const cfg = JSON.parse(readFileSync(path, 'utf8'));
-    expect(Object.keys(cfg.servers).sort()).toEqual(['github', 'gitlab', 'todoist']);
+  test('HS-E11: edit a builtin server (update token)', async ({ app }) => {
+    await app.completeOnboarding();
+    const { window } = app;
+    await gotoTab(window, 'Sources');
+
+    // Click the first Edit button (github is alphabetically first among the
+    // builtin servers). Use the first to avoid ambiguity.
+    await window.getByRole('button', { name: 'Edit' }).first().click();
+
+    // In form mode, the env var value input holds the placeholder token.
+    // Replace it with a real token.
+    await window.locator('input[placeholder="value"]').first().fill('ghp_real_token');
+
+    await window.getByRole('button', { name: 'Save' }).click();
+
+    // After saving, the editor closes. Verify the token was updated via IPC
+    // (more reliable than counting Placeholder badges in the DOM).
+    await expect(window.getByRole('button', { name: 'Save' })).toHaveCount(0);
+
+    const github = await window.evaluate(async () => {
+      const api = (
+        window as unknown as {
+          api: { mcpServers: { get: (name: string) => Promise<{ env: Record<string, string> } | null> } };
+        }
+      ).api;
+      return api.mcpServers.get('github');
+    });
+    expect(github?.env['GITHUB_PERSONAL_ACCESS_TOKEN']).toBe('ghp_real_token');
   });
 });
