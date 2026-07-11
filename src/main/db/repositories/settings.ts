@@ -41,6 +41,17 @@ export class SettingsRepository {
       ...(typeof stored['claudeCliPath'] === 'string'
         ? { claudeCliPath: stored['claudeCliPath'] }
         : {}),
+      ...(typeof stored['codexModel'] === 'string' && stored['codexModel'] !== ''
+        ? { codexModel: stored['codexModel'] }
+        : {}),
+      ...(typeof stored['codexReasoningEffort'] === 'string' &&
+        stored['codexReasoningEffort'] !== ''
+        ? {
+            codexReasoningEffort: stored[
+              'codexReasoningEffort'
+            ] as AppSettings['codexReasoningEffort'],
+          }
+        : {}),
       // Handoff specialization fields (all optional; absent until onboarding).
       ...(typeof stored['handoffAgentId'] === 'string'
         ? { handoffAgentId: stored['handoffAgentId'] }

@@ -116,6 +116,9 @@ function buildRunnerProvider(getSettings: () => AppSettings): RunnerProvider {
     }
     return new CodexAgentRunner({
       codexPathOverride: resolveCodexPath(settings.codexCliPath),
+      // App-level Codex defaults — overridden per-run when a rule sets its own.
+      model: settings.codexModel,
+      reasoningEffort: settings.codexReasoningEffort,
     });
   };
 }

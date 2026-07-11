@@ -16,6 +16,7 @@ import { Select } from '@renderer/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useRulesStore } from '@renderer/store/rules';
 import { useSettingsStore } from '@renderer/store/settings';
+import { CODEX_REASONING_EFFORTS } from '@shared/constants';
 import type { Rule, Trigger } from '@shared/types';
 
 function newRule(): Rule {
@@ -189,6 +190,46 @@ export function RuleEditor({ rule, onDone }: { rule?: Rule; onDone?: () => void 
             </Select>
           </div>
         </div>
+
+        {draft.backend === 'codex' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="model">Codex model (optional)</Label>
+              <Input
+                id="model"
+                placeholder="app default"
+                value={draft.model ?? ''}
+                onChange={(e) => set('model', e.target.value.trim() || undefined)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Override the app default. Blank = inherit from Settings.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="modelReasoningEffort">Codex reasoning effort (optional)</Label>
+              <Select
+                id="modelReasoningEffort"
+                value={draft.modelReasoningEffort ?? ''}
+                onChange={(e) =>
+                  set(
+                    'modelReasoningEffort',
+                    (e.target.value || undefined) as Rule['modelReasoningEffort'],
+                  )
+                }
+              >
+                <option value="">app default</option>
+                {CODEX_REASONING_EFFORTS.map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Override the app default. Blank = inherit from Settings.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1.5">

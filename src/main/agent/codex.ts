@@ -23,6 +23,7 @@ import {
   type Thread,
   type ThreadEvent,
   type Input,
+  type ModelReasoningEffort,
 } from '@openai/codex-sdk';
 import { serializeForCodexConfig, assertNoPlaceholders } from '../mcp/config.js';
 import type {
@@ -42,8 +43,10 @@ function toCodexSandbox(sandbox: 'read-only' | 'workspace-write'): 'read-only' |
 export interface CodexRunnerOptions {
   /** Extra Codex CLI config overrides (`--config key=value`). */
   codexOptions?: CodexOptions;
-  /** Default model id. */
+  /** Default model id (app-level default; overridden by a per-run `input.model`). */
   model?: string;
+  /** Default reasoning effort (app-level; overridden by a per-run `input.reasoningEffort`). */
+  reasoningEffort?: ModelReasoningEffort;
   /**
    * Path to a locally installed `codex` CLI to spawn instead of the SDK's
    * bundled vendored binary (arch §6.5.1). Resolved by cli-resolver.ts and
@@ -78,12 +81,18 @@ export class CodexAgentRunner implements AgentRunner {
           : {}),
       };
       codex = new Codex(codexOptions);
+      // Per-run overrides take precedence over the constructor (app-level)
+      // defaults. A value is only passed when something is actually set so we
+      // don't override the SDK/Codex default unnecessarily.
+      const model = input.model ?? this.opts.model;
+      const reasoningEffort = input.reasoningEffort ?? this.opts.reasoningEffort;
       thread = codex.startThread({
         workingDirectory: input.workdir,
         sandboxMode: toCodexSandbox(input.sandbox),
         // Auto-execute (architecture.md §6.3): no pre-write approval.
         approvalPolicy: 'never',
-        ...(this.opts.model ? { model: this.opts.model } : {}),
+        ...(model ? { model } : {}),
+        ...(reasoningEffort ? { modelReasoningEffort: reasoningEffort } : {}),
         // The workdir is staged by the caller and may not be a git repo.
         skipGitRepoCheck: true,
       });

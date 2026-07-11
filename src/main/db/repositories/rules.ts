@@ -24,6 +24,8 @@ interface RuleRow {
   trigger_json: string;
   mcp_servers_json: string;
   backend: string;
+  model: string | null;
+  model_reasoning_effort: string | null;
   workdir: string | null;
   sandbox: string;
   max_runs: number | null;
@@ -45,6 +47,8 @@ export function rowToRule(row: RuleRow): Rule {
     trigger: JSON.parse(row.trigger_json) as Trigger,
     mcpServers: JSON.parse(row.mcp_servers_json) as McpServerName[],
     backend: row.backend as Rule['backend'],
+    model: row.model ?? undefined,
+    modelReasoningEffort: (row.model_reasoning_effort ?? undefined) as Rule['modelReasoningEffort'],
     workdir: row.workdir ?? undefined,
     sandbox: row.sandbox as Rule['sandbox'],
     maxRuns: row.max_runs,
@@ -76,8 +80,8 @@ export class RulesRepository {
     const rows = this.db
       .prepare(
         `SELECT id, name, enabled, rule, trigger_json, mcp_servers_json, backend,
-                workdir, sandbox, max_runs, expires_at, notes, run_count,
-                disable_reason, created_at, updated_at
+                model, model_reasoning_effort, workdir, sandbox, max_runs, expires_at,
+                notes, run_count, disable_reason, created_at, updated_at
          FROM rules ORDER BY name ASC`,
       )
       .all() as unknown as RuleRow[];
@@ -89,8 +93,8 @@ export class RulesRepository {
     const row = this.db
       .prepare(
         `SELECT id, name, enabled, rule, trigger_json, mcp_servers_json, backend,
-                workdir, sandbox, max_runs, expires_at, notes, run_count,
-                disable_reason, created_at, updated_at
+                model, model_reasoning_effort, workdir, sandbox, max_runs, expires_at,
+                notes, run_count, disable_reason, created_at, updated_at
          FROM rules WHERE id = ?`,
       )
       .get(id) as RuleRow | undefined;
@@ -103,8 +107,9 @@ export class RulesRepository {
     this.db
       .prepare(
         `INSERT INTO rules (id, name, enabled, rule, trigger_json, mcp_servers_json,
-                            backend, workdir, sandbox, max_runs, expires_at, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            backend, model, model_reasoning_effort, workdir, sandbox,
+                            max_runs, expires_at, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         parsed.id,
@@ -114,6 +119,8 @@ export class RulesRepository {
         JSON.stringify(parsed.trigger),
         JSON.stringify(parsed.mcpServers),
         parsed.backend,
+        parsed.model ?? null,
+        parsed.modelReasoningEffort ?? null,
         parsed.workdir ?? null,
         parsed.sandbox,
         parsed.maxRuns ?? null,
@@ -129,8 +136,9 @@ export class RulesRepository {
       .prepare(
         `UPDATE rules SET
             name = ?, enabled = ?, rule = ?, trigger_json = ?, mcp_servers_json = ?,
-            backend = ?, workdir = ?, sandbox = ?, max_runs = ?, expires_at = ?,
-            notes = ?, updated_at = datetime('now')
+            backend = ?, model = ?, model_reasoning_effort = ?, workdir = ?,
+            sandbox = ?, max_runs = ?, expires_at = ?, notes = ?,
+            updated_at = datetime('now')
          WHERE id = ?`,
       )
       .run(
@@ -140,6 +148,8 @@ export class RulesRepository {
         JSON.stringify(parsed.trigger),
         JSON.stringify(parsed.mcpServers),
         parsed.backend,
+        parsed.model ?? null,
+        parsed.modelReasoningEffort ?? null,
         parsed.workdir ?? null,
         parsed.sandbox,
         parsed.maxRuns ?? null,

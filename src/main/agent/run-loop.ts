@@ -148,6 +148,10 @@ export async function executeRun(deps: RunLoopDeps, req: RunRequest): Promise<nu
         workdir: cwd,
         sandbox: rule.sandbox,
         servers,
+        // Per-rule overrides; undefined when blank → runner falls back to the
+        // app-level default (its constructor options).
+        model: rule.model,
+        reasoningEffort: rule.modelReasoningEffort,
       },
       logEvent,
     );

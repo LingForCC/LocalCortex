@@ -25,6 +25,18 @@ export interface RunInput {
   sandbox: 'read-only' | 'workspace-write';
   /** Resolved MCP servers to attach to this run. */
   servers: ResolvedMcpServers;
+  /**
+   * Optional per-run model id override (typically from the rule). When omitted,
+   * the runner falls back to its constructor-level default (the app setting).
+   * Ignored by backends that don't support model selection.
+   */
+  model?: string;
+  /**
+   * Optional per-run Codex reasoning-effort override (typically from the rule).
+   * When omitted, the runner falls back to its constructor-level default (the
+   * app setting). Codex-only; the Claude backend ignores it.
+   */
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   /** Optional abort signal (set on app-quit / run cancel). */
   signal?: AbortSignal;
   /** Optional upper bound on agent turns/iterations (safety). */

@@ -17,6 +17,7 @@ import initialSql from './migrations/001_initial.sql?raw';
 import handoffsSql from './migrations/002_handoffs.sql?raw';
 import handoffsEnabledSql from './migrations/003_handoffs_enabled.sql?raw';
 import catalogSql from './migrations/004_catalog.sql?raw';
+import ruleModelOverridesSql from './migrations/005_rule_model_overrides.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -34,6 +35,7 @@ const MIGRATIONS: Migration[] = [
   { version: 2, sql: handoffsSql },
   { version: 3, sql: handoffsEnabledSql },
   { version: 4, sql: catalogSql },
+  { version: 5, sql: ruleModelOverridesSql },
 ];
 
 /** Result of running migrations. */

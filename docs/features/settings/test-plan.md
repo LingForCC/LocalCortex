@@ -5,9 +5,9 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 ---
 
 ## In scope
-- `SettingsRepository.get` (defaults on empty table, incl. appearance) + `.update` (partial merge).
+- `SettingsRepository.get` (defaults on empty table, incl. appearance + Codex model/effort defaults) + `.update` (partial merge).
 - `ConcurrencyQueue` (cap enforcement, FIFO, error isolation, drain).
-- `settings:get/update` IPC (incl. `ingressSecret: null` → clear; CLI path validation; appearance → `nativeTheme`).
+- `settings:get/update` IPC (incl. `ingressSecret: null` → clear; CLI path validation; appearance → `nativeTheme`; codexModel/codexReasoningEffort round-trip).
 - `cli-resolver.ts` (explicit → PATH → undefined fallback, `isExecutablePath`).
 
 ## Out of scope
@@ -39,6 +39,9 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-R5 | codex/claude CLI paths persist | ✅ existing |
 | SE-R6 | clearing CLI paths (`''`) doesn't resurrect old values | ✅ existing |
 | SE-R7 | appearance defaults to `system`; explicit `dark`/`light` round-trips | ✅ existing |
+| SE-R8 | **codexModel defaults to `gpt-5.5`; codexReasoningEffort defaults to `medium`** | ✅ new |
+| SE-R9 | **codexModel + codexReasoningEffort round-trip through `update()` → `get()`** | ✅ new |
+| SE-R10 | **clearing codexModel to `''` reverts to the default (`gpt-5.5`)** — empty string is treated as unset so the schema default re-applies | ✅ new |
 
 ### cli-resolver — `src/main/agent/cli-resolver.test.ts`
 **Status:** ✅ covered — 10 cases.
@@ -110,6 +113,8 @@ Covers the **`SettingsRepository`** (defaults, merge-on-update, secret persisten
 | SE-M5 | CLI path applies without restart | set `codexCliPath` to a local binary; trigger a run | next run spawns the local binary (verify via logs) |
 | SE-M6 | Bad CLI path rejected on save | enter a non-existent path → Save | inline error; value not persisted |
 | SE-M7 | `System` follows the OS | set Appearance to `System`; toggle OS dark mode | window follows the OS scheme without a restart |
+| SE-M8 | **Codex model + effort defaults persist** | set codexModel `gpt-5.5`, effort `medium` → Save → relaunch | both values restored ✅ new |
+| SE-M9 | **Codex model default applies without restart** | change codexModel in Settings → Save; trigger a Codex run with no per-rule model | next run uses the new default (see [Agent backends A-M9](../agent-backends/test-plan.md#a-m9)) ✅ new |
 
 ---
 

@@ -16,7 +16,7 @@ import { Label } from '@renderer/components/ui/label';
 import { Select } from '@renderer/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useSettingsStore } from '@renderer/store/settings';
-import { APPEARANCES } from '@shared/constants';
+import { APPEARANCES, CODEX_REASONING_EFFORTS } from '@shared/constants';
 import type { AppSettings, AgentEntry, TaskManagerEntry } from '@shared/types';
 
 export function Settings() {
@@ -64,6 +64,10 @@ export function Settings() {
   );
   const [codexCliPath, setCodexCliPath] = React.useState(settings.codexCliPath ?? '');
   const [claudeCliPath, setClaudeCliPath] = React.useState(settings.claudeCliPath ?? '');
+  const [codexModel, setCodexModel] = React.useState(settings.codexModel ?? '');
+  const [codexReasoningEffort, setCodexReasoningEffort] = React.useState<
+    AppSettings['codexReasoningEffort']
+  >(settings.codexReasoningEffort);
   const [error, setError] = React.useState<string | undefined>();
   const [saved, setSaved] = React.useState(false);
 
@@ -79,6 +83,8 @@ export function Settings() {
     setAppearance(settings.appearance);
     setCodexCliPath(settings.codexCliPath ?? '');
     setClaudeCliPath(settings.claudeCliPath ?? '');
+    setCodexModel(settings.codexModel ?? '');
+    setCodexReasoningEffort(settings.codexReasoningEffort);
   }, [settings]);
 
   async function save() {
@@ -90,6 +96,8 @@ export function Settings() {
       appearance,
       codexCliPath,
       claudeCliPath,
+      codexModel,
+      codexReasoningEffort,
     });
     if (err) setError(err);
     else setSaved(true);
@@ -214,6 +222,42 @@ export function Settings() {
               Absolute path to a locally installed <code>claude</code> binary. Leave blank to
               auto-detect on <code>PATH</code> (falls back to the bundled binary).
             </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="codexModel">Codex model (default)</Label>
+              <Input
+                id="codexModel"
+                type="text"
+                placeholder="gpt-5.5"
+                value={codexModel}
+                onChange={(e) => setCodexModel(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Model id used when a rule doesn't set its own. Free-text (e.g.{' '}
+                <code>gpt-5.5</code>).
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="codexReasoningEffort">Codex reasoning effort (default)</Label>
+              <Select
+                id="codexReasoningEffort"
+                value={codexReasoningEffort}
+                onChange={(e) =>
+                  setCodexReasoningEffort(e.target.value as AppSettings['codexReasoningEffort'])
+                }
+              >
+                {CODEX_REASONING_EFFORTS.map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Applied to Codex rules that don't set their own effort.
+              </p>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

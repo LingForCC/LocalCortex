@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { MIN_TICK_INTERVAL_SECONDS } from '../constants.js';
+import { MIN_TICK_INTERVAL_SECONDS, CODEX_REASONING_EFFORTS } from '../constants.js';
 
 // --- Trigger (rule-config-schema.md §3) ------------------------------------
 
@@ -49,6 +49,20 @@ export const RuleSchema = z.object({
   mcpServers: z.array(z.string().trim().min(1)).min(1),
 
   backend: z.enum(['claude', 'codex']),
+
+  /**
+   * Optional per-rule Codex model id override. When omitted/empty, falls back to
+   * the app-level default (`settings.codexModel`) at run time. Free-text (not an
+   * enum) so new model ids work without a code change. Ignored by the Claude
+   * backend.
+   */
+  model: z.string().trim().optional(),
+  /**
+   * Optional per-rule Codex reasoning-effort override. When omitted, falls back
+   * to the app-level default (`settings.codexReasoningEffort`) at run time.
+   * Codex-only; the Claude backend ignores it.
+   */
+  modelReasoningEffort: z.enum(CODEX_REASONING_EFFORTS).optional(),
 
   /** Defaults to a per-rule scratch dir when omitted (§6). */
   workdir: z.string().trim().optional(),

@@ -17,6 +17,22 @@ export const APPEARANCES = ['system', 'light', 'dark'] as const;
 /** Default appearance — follow the OS preference out of the box. */
 export const DEFAULT_APPEARANCE = 'system';
 
+/**
+ * Valid Codex reasoning-effort levels. Mirrors the SDK's
+ * `ModelReasoningEffort` union (`@openai/codex-sdk`). Codex-only; Claude has no
+ * equivalent and ignores the field.
+ */
+export const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+
+/**
+ * Default Codex model id (app-level default; overridable per rule). Free-text —
+ * not pinned to an enum so new model ids work without a code change.
+ */
+export const DEFAULT_CODEX_MODEL = 'gpt-5.5';
+
+/** Default Codex reasoning effort (app-level default; overridable per rule). */
+export const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
+
 /** Default `maxRuns` backstop when a rule omits it (rule-config-schema §7: ≈2 days @ 60min). */
 export const DEFAULT_MAX_RUNS = 48;
 

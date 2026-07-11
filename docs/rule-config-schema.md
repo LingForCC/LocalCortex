@@ -22,6 +22,8 @@ All decisions referenced here are recorded in [architecture.md](./architecture.m
   "mcpServers": ["todoist"],                       // §4 — which servers to attach
 
   "backend": "claude",                             // §5 — claude | codex
+  "model": "gpt-5.5",                              // §5 — optional Codex model override
+  "modelReasoningEffort": "medium",                // §5 — optional Codex effort override
   "workdir": "/Users/colin/code/my-repo",          // §6 — agent working directory
   "sandbox": "read-only",                          // §6 — read-only | workspace-write
 
@@ -33,7 +35,7 @@ All decisions referenced here are recorded in [architecture.md](./architecture.m
 
 **Required fields:** `id`, `name`, `rule`, `trigger`, `mcpServers`, `backend`.
 
-**Optional fields** (with defaults): `enabled` (true), `workdir` (per-rule scratch dir), `sandbox` (read-only), `maxRuns` (global default, e.g. 48), `expiresAt` (none), `notes`.
+**Optional fields** (with defaults): `enabled` (true), `model` (app default `gpt-5.5`, Codex-only), `modelReasoningEffort` (app default `medium`, Codex-only), `workdir` (per-rule scratch dir), `sandbox` (read-only), `maxRuns` (global default, e.g. 48), `expiresAt` (none), `notes`.
 
 ### Design principle: the rule is the spec
 
@@ -154,6 +156,26 @@ The `AgentRunner` interface abstracts the difference:
 
 - **`claude`** — uses `options.cwd` for the workdir and `options.mcpServers` for in-call MCP config.
 - **`codex`** — uses `startThread`'s `workingDirectory` for the workdir and the SDK's `options.config` for in-call MCP config (serialized into `--config key=value` flags).
+
+### 5.1 `model` / `modelReasoningEffort` — Codex model override (optional)
+
+Two optional fields let a Codex rule override the app-level model defaults:
+
+```jsonc
+"model": "gpt-5.6-sol",                  // free-text model id; omit = app default (gpt-5.5)
+"modelReasoningEffort": "xhigh"          // minimal | low | medium | high | xhigh; omit = app default (medium)
+```
+
+Resolution at run time (same fallback pattern as `trigger.intervalSeconds`):
+
+```
+model           = rule.model              ?? settings.codexModel              (default: gpt-5.5)
+reasoningEffort = rule.modelReasoningEffort ?? settings.codexReasoningEffort  (default: medium)
+```
+
+- **Codex-only.** The Claude backend ignores both fields.
+- **`model` is free-text** so new model ids work without a code change, but the Codex binary/SDK must support the id or the run fails with an API error.
+- **Omit both to inherit the app default.** This is how the [auto-created handoff rule](./features/handoff-setup/README.md) works — it leaves both blank and tracks the app default automatically. See [Settings](./features/settings/README.md#codex-model--reasoning-effort-defaults).
 
 ---
 

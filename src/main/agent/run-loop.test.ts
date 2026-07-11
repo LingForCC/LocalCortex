@@ -241,6 +241,68 @@ describe('executeRun', () => {
     );
   });
 
+  it('forwards per-rule model + reasoning-effort overrides to the runner', async () => {
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    rulesRepo.create(
+      makeRule({ backend: 'codex', model: 'gpt-5.6-sol', modelReasoningEffort: 'xhigh' }),
+    );
+
+    const seen: RunInput[] = [];
+    const codexRunner: AgentRunner = {
+      backend: 'codex',
+      async run(input: RunInput) {
+        seen.push(input);
+        return { text: '{"status":"done"}', toolCalls: [], isError: false };
+      },
+    };
+
+    await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => codexRunner,
+        appDataRoot: appData,
+        trigger: 'tick',
+      },
+      { ruleId: 'r1' },
+    );
+
+    expect(seen[0]?.model).toBe('gpt-5.6-sol');
+    expect(seen[0]?.reasoningEffort).toBe('xhigh');
+  });
+
+  it('omits model/reasoningEffort from the runner input when the rule leaves them blank', async () => {
+    const rulesRepo = new RulesRepository(db);
+    const runsRepo = new RunsRepository(db);
+    rulesRepo.create(makeRule({ backend: 'codex' })); // no model/effort set
+
+    const seen: RunInput[] = [];
+    const codexRunner: AgentRunner = {
+      backend: 'codex',
+      async run(input: RunInput) {
+        seen.push(input);
+        return { text: '{"status":"done"}', toolCalls: [], isError: false };
+      },
+    };
+
+    await executeRun(
+      {
+        rulesRepo,
+        runsRepo,
+        mcpConfig,
+        runnerProvider: () => codexRunner,
+        appDataRoot: appData,
+        trigger: 'tick',
+      },
+      { ruleId: 'r1' },
+    );
+
+    expect(seen[0]?.model).toBeUndefined();
+    expect(seen[0]?.reasoningEffort).toBeUndefined();
+  });
+
   it('throws when the rule references an undefined MCP server', async () => {
     const rulesRepo = new RulesRepository(db);
     rulesRepo.create(makeRule({ mcpServers: ['nope'] }));

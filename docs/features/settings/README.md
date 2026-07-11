@@ -1,6 +1,6 @@
 # Settings
 
-Global defaults that apply across all rules. The **Settings** tab exposes six knobs: the default tick interval, the concurrency cap, the appearance (light/dark/system), an optional event-ingress shared secret, and optional explicit paths to the Codex / Claude Code CLIs.
+Global defaults that apply across all rules. The **Settings** tab exposes the default tick interval, the concurrency cap, the appearance (light/dark/system), an optional event-ingress shared secret, optional explicit paths to the Codex / Claude Code CLIs, and the Codex model + reasoning-effort defaults.
 
 > Design: [architecture §6.4 (concurrency)](../../architecture.md#64-concurrency--capped-parallelism), [§6.5 (cadence)](../../architecture.md#65-cadence--global-default--per-rule-override), [§6.5.1 (CLI resolution)](../../architecture.md#651-cli-resolution--local-vs-bundled-binary), [§8 (ingress security)](../../architecture.md#8-known-constraints--risks).
 
@@ -16,6 +16,8 @@ Global defaults that apply across all rules. The **Settings** tab exposes six kn
 | **Ingress shared secret** | none (unset) | If set, every POST to the event ingress must carry `x-localcortex-secret: <value>` or get HTTP 401. |
 | **Codex CLI path** | none (auto-detect) | Explicit path to a locally installed `codex` binary. Leave blank to auto-detect on `PATH` (falls back to the SDK's bundled binary). |
 | **Claude Code CLI path** | none (auto-detect) | Explicit path to a locally installed `claude` binary. Same resolution semantics as the Codex field. |
+| **Codex model (default)** | `gpt-5.5` | Model id used when a Codex rule doesn't set its own `model`. Free-text (e.g. `gpt-5.6-sol`). |
+| **Codex reasoning effort (default)** | `medium` | Applied to Codex rules that don't set their own effort (`minimal` / `low` / `medium` / `high` / `xhigh`). |
 | **Handoff setup** | unset (onboarding required) | The three onboarding choices (`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`) plus the auto-created rule id (`handoffRuleId`). Managed by the [handoff setup](../handoff-setup/README.md) wizard; shown read-only in the Settings view with a reset button. |
 
 Settings persist in the `app_settings` table and survive restarts.
@@ -81,6 +83,23 @@ Behavior notes:
 - **No restart needed.** The runner provider re-reads Settings on every run, so a change takes effect on the next enqueued run.
 - **Best-effort validation.** The check catches typos and missing files but can't guarantee the binary is the *right* one — a wrong-but-executable binary still spawns and fails at run time (surfaced in run history).
 
+## Codex model / reasoning effort (defaults)
+
+The Codex backend takes two model-level knobs: the **model id** (free-text, e.g. `gpt-5.5`) and the **reasoning effort** (`minimal` / `low` / `medium` / `high` / `xhigh`). Both have an **app-level default** set here, and an optional **per-rule override** (see [Rules](../rules/README.md)).
+
+Resolution at run time:
+```
+model              = rule.model              ?? settings.codexModel              (default: gpt-5.5)
+reasoningEffort    = rule.modelReasoningEffort ?? settings.codexReasoningEffort  (default: medium)
+```
+
+This mirrors the tick-interval fallback: a rule that leaves the field blank always uses whatever the current app default is. So changing the app default immediately affects every rule that doesn't override it — including the [auto-created handoff rule](../handoff-setup/README.md), which leaves both fields blank and inherits by design.
+
+Notes:
+- **Codex-only.** The Claude backend ignores both fields.
+- **Model is free-text.** New model ids work without a code change, but the Codex binary/SDK must support the id or the run fails with an API error (surfaced in run history). If you point `codexCliPath` at an older bundled binary, pick a model it knows.
+- **`xhigh` ≈ the desktop app's "ultra".** The SDK's enum is `minimal` / `low` / `medium` / `high` / `xhigh`; there is no `ultra` value. Your global `~/.codex/config.toml` is still respected as a base layer, but an explicit value here (or on the rule) overrides it for the run.
+
 ---
 
 ## Using the Settings view
@@ -90,7 +109,8 @@ Behavior notes:
 3. (Optional) choose an **Appearance** — `System` follows your OS.
 4. (Optional) set an **Ingress shared secret** — leave blank to disable auth.
 5. (Optional) set **Codex CLI path** / **Claude Code CLI path** — leave blank to auto-detect on `PATH`.
-6. Click **Save**.
+6. (Optional) set the **Codex model** / **Codex reasoning effort** defaults — applied to any Codex rule that doesn't override them.
+7. Click **Save**.
 
 Changes apply immediately: the concurrency cap takes effect for the next enqueued run; the tick default reschedules dependent rules on save; the secret gate applies to the next inbound event; a CLI path change applies to the next run; the appearance takes effect on the next paint.
 

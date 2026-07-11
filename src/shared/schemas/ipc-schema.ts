@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
 import { HandoffSchema, CreateHandoffSchema } from './handoff-schema.js';
-import { APPEARANCES } from '../constants.js';
+import { APPEARANCES, CODEX_REASONING_EFFORTS } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
 
@@ -156,6 +156,10 @@ export const UpdateSettingsMessageSchema = z.object({
   codexCliPath: z.string().nullable().optional(),
   /** Explicit path to a local Claude Code CLI. null clears it (auto-detect/default). */
   claudeCliPath: z.string().nullable().optional(),
+  /** Codex model id. null clears back to the app default. */
+  codexModel: z.string().nullable().optional(),
+  /** Codex reasoning effort. null clears back to the app default. */
+  codexReasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().optional(),
   // Handoff specialization — managed by handoff-setup:complete / reset, not the
   // Settings view directly. Accepted here so they round-trip through the shared
   // settings patch builder.

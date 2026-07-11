@@ -8,6 +8,8 @@ import {
   DEFAULT_TICK_INTERVAL_SECONDS,
   DEFAULT_CONCURRENCY,
   DEFAULT_APPEARANCE,
+  DEFAULT_CODEX_MODEL,
+  DEFAULT_CODEX_REASONING_EFFORT,
 } from '@shared/constants';
 
 interface SettingsState {
@@ -28,6 +30,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     tickIntervalSeconds: DEFAULT_TICK_INTERVAL_SECONDS,
     concurrency: DEFAULT_CONCURRENCY,
     appearance: DEFAULT_APPEARANCE,
+    codexModel: DEFAULT_CODEX_MODEL,
+    codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   },
   serverNames: [],
   placeholders: [],

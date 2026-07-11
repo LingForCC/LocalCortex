@@ -12,6 +12,9 @@ import {
   DEFAULT_CONCURRENCY,
   APPEARANCES,
   DEFAULT_APPEARANCE,
+  CODEX_REASONING_EFFORTS,
+  DEFAULT_CODEX_MODEL,
+  DEFAULT_CODEX_REASONING_EFFORT,
 } from '../constants.js';
 
 export const AppSettingsSchema = z.object({
@@ -44,6 +47,16 @@ export const AppSettingsSchema = z.object({
    * Same resolution semantics as `codexCliPath` (arch §6.5.1).
    */
   claudeCliPath: z.string().optional(),
+  /**
+   * App-level default Codex model id. Used when a rule omits its own `model`.
+   * Free-text (not an enum) so new model ids work without a code change.
+   */
+  codexModel: z.string().trim().default(DEFAULT_CODEX_MODEL),
+  /**
+   * App-level default Codex reasoning effort. Used when a rule omits its own
+   * `modelReasoningEffort`. Codex-only; the Claude backend ignores it.
+   */
+  codexReasoningEffort: z.enum(CODEX_REASONING_EFFORTS).default(DEFAULT_CODEX_REASONING_EFFORT),
 
   // --- Handoff specialization (docs/features/handoff-setup/README.md) -------
   //

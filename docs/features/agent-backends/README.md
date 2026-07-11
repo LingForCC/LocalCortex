@@ -15,6 +15,7 @@ The `AgentRunner` abstraction hides the two SDKs' differences behind one interfa
 | MCP config | per-call: `options.mcpServers` | per-call: `options.config` → flattened to `--config key=value` flags |
 | Working dir | `options.cwd` (honors `rule.workdir`) | `startThread` `workingDirectory` (honors `rule.workdir`) |
 | Approval (auto-execute) | `permissionMode: 'bypassPermissions'` | `approvalPolicy: 'never'` (ThreadOptions) |
+| Model + reasoning effort | `model` only (no effort concept) | `model` + `modelReasoningEffort` (`minimal`/`low`/`medium`/`high`/`xhigh`) |
 | CLI binary override | `pathToClaudeCodeExecutable` | `codexPathOverride` |
 | Result usage | `usage.input_tokens` / `output_tokens` | `usage.input_tokens` / `output_tokens` (on the `turn.completed` event) |
 

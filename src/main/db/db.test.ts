@@ -5,7 +5,12 @@ import { RulesRepository } from './repositories/rules.js';
 import { RunsRepository } from './repositories/runs.js';
 import { SettingsRepository } from './repositories/settings.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { DEFAULT_TICK_INTERVAL_SECONDS, DEFAULT_CONCURRENCY } from '@shared/constants.js';
+import {
+  DEFAULT_TICK_INTERVAL_SECONDS,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_CODEX_MODEL,
+  DEFAULT_CODEX_REASONING_EFFORT,
+} from '@shared/constants.js';
 import type { Rule } from '@shared/types';
 
 let db: DatabaseSync;
@@ -107,6 +112,41 @@ describe('RulesRepository', () => {
     const repo = new RulesRepository(db);
     // @ts-expect-error intentionally invalid trigger
     expect(() => repo.create({ ...tickRule, trigger: { type: 'nope' } })).toThrow();
+  });
+
+  it('round-trips per-rule Codex model + reasoning effort overrides', () => {
+    const repo = new RulesRepository(db);
+    repo.create({
+      ...tickRule,
+      id: 'r-codex',
+      backend: 'codex',
+      model: 'gpt-5.6-sol',
+      modelReasoningEffort: 'xhigh',
+    });
+    const got = repo.get('r-codex');
+    expect(got?.model).toBe('gpt-5.6-sol');
+    expect(got?.modelReasoningEffort).toBe('xhigh');
+
+    // Omitted overrides persist as undefined (NULL → inherit app default at run).
+    repo.create({ ...tickRule, id: 'r-blank', backend: 'codex' });
+    const blank = repo.get('r-blank');
+    expect(blank?.model).toBeUndefined();
+    expect(blank?.modelReasoningEffort).toBeUndefined();
+  });
+
+  it('rejects an invalid modelReasoningEffort value via the schema', () => {
+    const repo = new RulesRepository(db);
+    // @ts-expect-error intentionally invalid enum value
+    expect(() => repo.create({ ...tickRule, modelReasoningEffort: 'ultra' })).toThrow();
+  });
+
+  it('updates per-rule model + reasoning effort overrides', () => {
+    const repo = new RulesRepository(db);
+    repo.create({ ...tickRule, id: 'r-up', backend: 'codex' });
+    repo.update({ ...tickRule, id: 'r-up', backend: 'codex', model: 'gpt-5.5', modelReasoningEffort: 'high' });
+    const got = repo.get('r-up');
+    expect(got?.model).toBe('gpt-5.5');
+    expect(got?.modelReasoningEffort).toBe('high');
   });
 });
 
@@ -213,6 +253,8 @@ describe('SettingsRepository', () => {
     expect(s.tickIntervalSeconds).toBe(DEFAULT_TICK_INTERVAL_SECONDS);
     expect(s.concurrency).toBe(DEFAULT_CONCURRENCY);
     expect(s.appearance).toBe('system');
+    expect(s.codexModel).toBe(DEFAULT_CODEX_MODEL);
+    expect(s.codexReasoningEffort).toBe(DEFAULT_CODEX_REASONING_EFFORT);
   });
 
   it('persists and round-trips the appearance setting', () => {
@@ -256,5 +298,22 @@ describe('SettingsRepository', () => {
     const s = repo.get();
     expect(s.codexCliPath).toBe('');
     expect(s.claudeCliPath).toBe('');
+  });
+
+  it('persists and round-trips Codex model + reasoning effort', () => {
+    const repo = new SettingsRepository(db);
+    repo.update({ codexModel: 'gpt-5.6-sol', codexReasoningEffort: 'xhigh' });
+    const s = repo.get();
+    expect(s.codexModel).toBe('gpt-5.6-sol');
+    expect(s.codexReasoningEffort).toBe('xhigh');
+  });
+
+  it('falls back to the app default when codexModel is cleared to empty', () => {
+    const repo = new SettingsRepository(db);
+    repo.update({ codexModel: 'gpt-5.6-sol' });
+    expect(repo.get().codexModel).toBe('gpt-5.6-sol');
+    // Clearing to empty reverts to the default (empty string is treated as unset).
+    repo.update({ codexModel: '' });
+    expect(repo.get().codexModel).toBe(DEFAULT_CODEX_MODEL);
   });
 });

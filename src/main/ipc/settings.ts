@@ -67,6 +67,12 @@ export function registerSettingsIpc(
     if (parsed.claudeCliPath !== undefined) {
       patch.claudeCliPath = parsed.claudeCliPath ?? '';
     }
+    if (parsed.codexModel !== undefined) {
+      patch.codexModel = parsed.codexModel ?? '';
+    }
+    if (parsed.codexReasoningEffort !== undefined && parsed.codexReasoningEffort !== null) {
+      patch.codexReasoningEffort = parsed.codexReasoningEffort;
+    }
     // Handoff specialization fields are normally managed by handoff-setup IPC
     // (which uses clearHandoffFields for reset). Thread them through here too
     // for direct settings edits: a non-null string sets, null clears to empty.

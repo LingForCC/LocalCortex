@@ -50,6 +50,10 @@ Covers rule **authoring, persistence, and CRUD**. The behavior of *running* a ru
 | R-U12 | `backend` not claude/codex | rejects |
 | R-U13 | `sandbox` not read-only/workspace-write | rejects |
 | R-U14 | defaults applied: `enabled=true`, `sandbox=read-only`, `args/env` | parses with defaults |
+| R-U15 | **`model` omitted** → parses (optional; falls back to app default at runtime) | parses, `model` undefined ✅ new |
+| R-U16 | **`model` set to a free-text id (e.g. `gpt-5.6-sol`)** | parses ✅ new |
+| R-U17 | **`modelReasoningEffort` valid enum (`minimal`..`xhigh`)** | parses ✅ new |
+| R-U18 | **`modelReasoningEffort` invalid (e.g. `ultra`)** | rejects (not in enum) ✅ new |
 
 **Existing coverage:** `RuleSchema.parse` is exercised through `rowToRule` in `src/main/db/db.test.ts` (RulesRepository suite, 7 tests). The dedicated cases above are not yet a standalone suite.
 
@@ -65,6 +69,10 @@ Covers rule **authoring, persistence, and CRUD**. The behavior of *running* a ru
 | R-R5 | incrementRunCount returns new count; resetRunCount zeroes it | ✅ existing |
 | R-R6 | delete removes the row | ✅ existing |
 | R-R7 | create rejects an invalid rule via schema | ✅ existing |
+| R-R8 | **per-rule `model` + `modelReasoningEffort` round-trip through create → get** | values preserved ✅ new |
+| R-R9 | **omitted model/effort persist as `undefined` (NULL → inherit app default at run)** | both `undefined` ✅ new |
+| R-R10 | **create rejects an invalid `modelReasoningEffort` (e.g. `ultra`) via schema** | throws ✅ new |
+| R-R11 | **update persists `model` + `modelReasoningEffort` changes** | updated values retrieved ✅ new |
 
 ---
 
@@ -93,6 +101,7 @@ Run after any change to the rule editor or repository.
 4. **Delete**; confirm the row and its run history are gone.
 5. **Validation**: try to save a rule with an empty MCP servers field — confirm rejection at the form, not the DB.
 6. **Cross-file**: save a rule referencing `mcpServers: ["ghost"]` (undefined) — confirm it saves but the Sources tab flags it and a run fails with a clear "server 'ghost' is not defined" message.
+7. **Per-rule model/effort override (Codex).** Create a Codex rule, set per-rule model `gpt-5.6-sol` and effort `xhigh`. Confirm: both fields save and survive restart; the model/effort inputs only appear when backend is `codex`; leaving both blank saves them as unset (inherits the app default — see [Agent backends A-M9/A-M10](../agent-backends/test-plan.md)).
 
 ---
 
