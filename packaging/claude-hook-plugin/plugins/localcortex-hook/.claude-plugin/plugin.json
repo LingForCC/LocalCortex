@@ -1,0 +1,8 @@
+{
+  "name": "localcortex-hook",
+  "version": "0.1.0",
+  "description": "Bridges Claude Code session lifecycle events (prompt-submit + complete) into LocalCortex's local event ingress. Fires in every Claude Code workspace once enabled.",
+  "author": {
+    "name": "Colin Liu"
+  }
+}

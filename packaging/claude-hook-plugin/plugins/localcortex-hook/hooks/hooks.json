@@ -1,0 +1,29 @@
+{
+  "description": "Bridges Claude Code session lifecycle events (prompt-submit + complete) into LocalCortex's local event ingress.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "LC_EVENT_TYPE=claude-code.prompt-submit bash \"${CLAUDE_PLUGIN_ROOT}/scripts/localcortex-hook.sh\"",
+            "timeout": 10,
+            "statusMessage": "Notifying LocalCortex"
+          }
+        ]
+      }
+    ]
+  }
+}

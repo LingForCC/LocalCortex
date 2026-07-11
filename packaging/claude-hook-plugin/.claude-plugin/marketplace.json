@@ -1,0 +1,15 @@
+{
+  "name": "localcortex-claude-hook",
+  "owner": {
+    "name": "Colin Liu"
+  },
+  "version": 1,
+  "plugins": [
+    {
+      "name": "localcortex-hook",
+      "description": "Bridges Claude Code session-lifecycle events into LocalCortex's local event ingress via Stop and UserPromptSubmit hooks.",
+      "source": "./plugins/localcortex-hook",
+      "version": "0.1.0"
+    }
+  ]
+}
