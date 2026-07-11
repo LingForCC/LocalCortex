@@ -1,28 +1,32 @@
 # Handoff setup — Test Plan
 
 Covers the **onboarding wizard**, the **auto-created handoff rule** (pure setup
-builder), the **DB catalog** (agents, task managers, MCP servers), the
-**handoff-setup IPC** (`complete` / `reset`), and the **MCP-server config source
-migration** from file to DB. The behavior of *running* the auto-created rule
-(matching, execution, stop conditions) is covered by [Triggers](../triggers/test-plan.md),
-[Agent backends](../agent-backends/test-plan.md), and [Stop conditions](../stop-conditions/test-plan.md).
+builder), the **agents and task-managers catalog** repos, the **handoff-setup
+IPC** (`complete` / `reset`), and the onboarding/Home/Settings **renderer UI**.
+The behavior of *running* the auto-created rule (matching, execution, stop
+conditions) is covered by [Triggers](../triggers/test-plan.md), [Agent
+backends](../agent-backends/test-plan.md), and [Stop
+conditions](../stop-conditions/test-plan.md). The MCP servers table, Sources
+CRUD UI, and legacy file import are covered by [MCP sources](../mcp-sources/test-plan.md).
 
 ---
 
 ## In scope
 
 - **Setup builder** (`setup-builder.ts`): the pure `buildHandoffRule` function — trigger derivation, backend independence, MCP server reference, sandbox, prompt, idempotent id/name.
-- **DB catalog repositories**: `McpServersRepository` (CRUD + `getAsConfig` + legacy import + placeholder detection), `AgentsRepository` (CRUD + seeding + ordering), `TaskManagersRepository` (CRUD + seeding + FK enforcement).
+- **Agents catalog repository**: `AgentsRepository` (CRUD + seeding + ordering).
+- **Task managers catalog repository**: `TaskManagersRepository` (CRUD + seeding + FK enforcement).
 - **Settings extension**: the four handoff fields (`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`, `handoffRuleId`) round-trip through `SettingsRepository.get()` / `update()` / `clearHandoffFields()`.
 - **Handoff-setup IPC** (`ipc/handoff-setup.ts`): `complete` (validate → persist → create-or-update rule → broadcast) and `reset` (clear settings without deleting the rule).
-- **Catalog + MCP-server IPC** (`ipc/catalog.ts`): CRUD channels for agents, task managers, and MCP servers (validate-then-act).
-- **MCP config source migration**: the run-loop now reads `mcp_servers` from the DB via `getAsConfig()` instead of the retired `mcp-servers.json` file; legacy import preserves existing tokens.
-- Renderer UI: the 4-step onboarding wizard, the Home dashboard, the Sources CRUD table (form + JSON paste), the shell onboarding gate.
+- **Agents + task-managers catalog IPC** (`ipc/catalog.ts`): CRUD channels for agents and task managers (validate-then-act).
+- Renderer UI: the 4-step onboarding wizard, the Home dashboard, the shell onboarding gate, the Settings handoff-setup section.
 
 ## Out of scope (covered elsewhere)
 
 - Event-type matching (does `zcode.session-complete` match the rule?) → [Triggers](../triggers/test-plan.md).
 - Agent execution of the auto-created rule → [Agent backends](../agent-backends/test-plan.md).
+- MCP server table (seeding, CRUD, `getAsConfig`, legacy import, placeholder detection) → [MCP sources](../mcp-sources/test-plan.md) (M-R1..R10).
+- Sources tab UI (form + JSON-paste CRUD, edit builtin) → [MCP sources](../mcp-sources/test-plan.md) (M-E1..E6).
 - MCP serialization (Claude/Codex wire formats) → [MCP sources](../mcp-sources/test-plan.md).
 - Template rendering of `{{parentTaskId}}` → [Triggers](../triggers/test-plan.md) (`renderTemplate`).
 - The handoff popup and enrichment pipeline → [Handoffs](../handoffs/test-plan.md).
@@ -57,22 +61,6 @@ migration** from file to DB. The behavior of *running* the auto-created rule
 | HS-S8 | is enabled by default | `enabled = true` ✅ new |
 | HS-S9 | references agent + task manager labels in notes | notes contain both labels ✅ new |
 | HS-S10 | passes validation through `RuleSchema` (no parse error) | `RuleSchema.parse(rule)` does not throw ✅ new |
-
-### MCP servers repository — `McpServersRepository` (`src/main/db/repositories/mcp-servers.ts`)
-**Status:** ✅ covered — `src/main/db/repositories/mcp-servers.test.ts` (10 cases).
-
-| # | Case | Expected |
-| --- | --- | --- |
-| HS-M1 | seeds the v1 defaults on migration | names contain github, gitlab, todoist, omnifocus ✅ new |
-| HS-M2 | marks seeded servers as builtin | `isBuiltin = true` ✅ new |
-| HS-M3 | seeds placeholder tokens for github/gitlab/todoist (not omnifocus) | `placeholderNames()` includes the three; excludes omnifocus ✅ new |
-| HS-M4 | upserts a new server | row created + retrievable ✅ new |
-| HS-M5 | upsert overwrites an existing server | all fields updated; env replaced ✅ new |
-| HS-M6 | deletes a server | row removed; `getByName` returns null ✅ new |
-| HS-M7 | `getAsConfig` returns a McpServersFile-shaped object | resolver-compatible `{ servers: { … } }` ✅ new |
-| HS-M8 | `getAsConfig` includes custom servers added via upsert | upserted server visible in config ✅ new |
-| HS-M9 | legacy import: overwrites seeds with real tokens, adds custom server, idempotent | tokens replaced; placeholder cleared; custom added; re-import = same count ✅ new |
-| HS-M10 | legacy import: returns 0 for missing or malformed file | seeds intact; no throw ✅ new |
 
 ### Agents repository — `AgentsRepository` (`src/main/db/repositories/agents.ts`)
 **Status:** ✅ covered — `src/main/db/repositories/agents.test.ts` (7 cases).
@@ -123,10 +111,11 @@ capture handlers, same pattern as `ipc/handoffs.test.ts`.
 | HS-I7 | reset clears the handoff settings fields | complete then reset | all four handoff fields `undefined` in settings ✅ new |
 | HS-I8 | reset does NOT delete the rule (user may keep it) | complete then reset | rule still exists in rules repo ✅ new |
 
-### Catalog + MCP servers — `ipc/catalog.ts`
+### Catalog IPC — `ipc/catalog.ts`
 
-CRUD handlers for `agents:*`, `task-managers:*`, `mcp-servers:*`. Each validates
-with a Zod schema before acting (the standard pattern).
+CRUD handlers for `agents:*` and `task-managers:*`. Each validates with a Zod
+schema before acting (the standard pattern). The `mcp-servers:*` handlers in the
+same file are covered by [MCP sources](../mcp-sources/test-plan.md) (M-I4, M-I5).
 
 **Status:** not unit-tested (Electron-coupled; same gap as the existing `ipc/servers.ts`). Verify via E2E/manual.
 
@@ -134,14 +123,12 @@ with a Zod schema before acting (the standard pattern).
 | --- | --- | --- |
 | HS-C1 | `agents:create` inserts and returns the row | row retrievable via `agents:get` |
 | HS-C2 | `task-managers:create` inserts and returns the row | row retrievable via `task-managers:get` |
-| HS-C3 | `mcp-servers:upsert` creates or updates a server | row persisted with correct fields |
-| HS-C4 | `mcp-servers:delete` removes a non-builtin server | row removed; returns `true` |
 
 ---
 
-## E2E (Playwright) — Onboarding wizard + Sources tab
+## E2E (Playwright) — Onboarding wizard + Home + Settings
 
-**Status:** planned — `playwright/onboarding.spec.ts` + `playwright/sources.spec.ts` (on the shared isolation fixture).
+**Status:** ✅ covered — `playwright/onboarding.spec.ts` (12 cases) on the shared isolation fixture. Sources tab E2E (HS-E8..E11 in the original plan) lives in `playwright/sources.spec.ts` and is documented under [MCP sources](../mcp-sources/test-plan.md) (M-E1..E6) — no duplication here.
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
@@ -152,10 +139,6 @@ with a Zod schema before acting (the standard pattern).
 | HS-E5 | "Add custom task manager" form creates a row | Step 2 → Add custom → fill → Save | New task manager appears in the picker |
 | HS-E6 | Agent install instructions show on review step | Reach step 4 with an agent selected | Instructions text visible |
 | HS-E7 | Task manager setup instructions show on review step | Reach step 4 with a task manager selected | Instructions text visible |
-| HS-E8 | Sources tab lists seeded servers + flags placeholders | Open Sources tab | github/gitlab/todoist flagged as Placeholder; omnifocus not |
-| HS-E9 | Sources form mode: add a server | Add server (form) → fill → Save | Server appears in list |
-| HS-E10 | Sources JSON-paste mode: add a server | Add server (JSON) → paste block → Save | Server parsed and persisted |
-| HS-E11 | Sources edit a builtin server | Edit github → change token → Save | Token updated; builtin not deletable |
 | HS-E12 | Home tab shows current setup + recent handoffs | Navigate to Home | Agent, task manager, backend, rule status shown |
 | HS-E13 | Home "Change setup" re-opens onboarding | Click Change setup | Onboarding wizard appears |
 | HS-E14 | Settings reset clears setup | Settings → Reset setup | Returns to onboarding on next render |
@@ -165,7 +148,8 @@ with a Zod schema before acting (the standard pattern).
 ## Manual test plan
 
 Run after any change to the setup builder, the catalog repos, the handoff-setup
-IPC, the onboarding wizard, or the MCP config source.
+IPC, or the onboarding wizard. Sources CRUD and legacy file import are covered
+in the [MCP sources manual plan](../mcp-sources/test-plan.md#e2e--manual).
 
 1. **First launch → onboarding.** Launch with a fresh DB. Confirm the 4-step wizard appears (not the shell).
 2. **Complete setup (ZCode + OmniFocus).** Select ZCode → OmniFocus → Claude → Finish. Confirm: the shell appears, Home shows the correct choices, and the `handoff-auto` rule is visible in Rules (Advanced) with trigger `zcode.session-complete`, backend `claude`, mcpServers `['omnifocus']`.
@@ -173,10 +157,8 @@ IPC, the onboarding wizard, or the MCP config source.
 4. **Change setup.** Home → Change setup. Re-run with Codex → OmniFocus → Codex. Confirm the same `handoff-auto` rule is updated in place (not duplicated) — trigger now `codex.session-complete`, backend `codex`.
 5. **Add a custom task manager (zero-code).** Sources tab → add an MCP server (e.g. `todoist` with a real token). Then Home → Change setup → step 2 → Add custom → fill in referencing the server. Confirm it's immediately selectable and the rule switches to it on finish.
 6. **Add a custom coding agent (zero-code).** Onboarding step 1 → Add custom → fill in event types + instructions. Confirm it's selectable. (The agent-side hook is the user's responsibility.)
-7. **Legacy file import.** Place a pre-existing `~/.localcortex/mcp-servers.json` with real tokens. Launch the app. Confirm the servers are imported (tokens preserved) and visible in Sources. Confirm the file is no longer needed after import.
-8. **Sources CRUD.** Add a server via form mode; add another via JSON paste; edit a builtin server's token; confirm all changes persist across app restart.
-9. **Reset setup.** Settings → Reset setup. Confirm the wizard re-appears. Confirm the `handoff-auto` rule is still present in Rules (not deleted) — re-running setup will overwrite it.
-10. **Onboarding gate reactivity.** After completing setup, confirm the shell shows immediately (no stuck "Setting up…" state). After reset, confirm the wizard shows immediately without a manual reload.
+7. **Reset setup.** Settings → Reset setup. Confirm the wizard re-appears. Confirm the `handoff-auto` rule is still present in Rules (not deleted) — re-running setup will overwrite it.
+8. **Onboarding gate reactivity.** After completing setup, confirm the shell shows immediately (no stuck "Setting up…" state). After reset, confirm the wizard shows immediately without a manual reload.
 
 ---
 

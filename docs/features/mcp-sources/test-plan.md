@@ -63,14 +63,16 @@ serialization** (Claude + Codex TOML), and **placeholder-token detection**.
 
 ## E2E / Manual
 
+**Status:** ✅ covered — `playwright/sources.spec.ts` (4 automated cases), plus manual scenarios.
+
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab | servers shown, placeholders flagged |
-| M-E2 | Form mode: add a server | Fill form → Save | server appears in list |
-| M-E3 | JSON-paste mode: add a server | Paste JSON block → Save | server parsed and persisted |
-| M-E4 | Edit a builtin server | Edit github → change token → Save | token updated |
-| M-E5 | Legacy import on upgrade | Place a real `mcp-servers.json` → launch app | servers imported with tokens preserved |
-| M-E6 | Adding a server + referencing it in a rule works | Add server, reference in rule, run | agent can call that server's tools — manual |
+| M-E1 | Sources view lists servers + flags placeholders | Open Sources tab (after onboarding) | servers shown, placeholders flagged ✅ existing |
+| M-E2 | Form mode: add a server | Add server (form) → fill → Save | server appears in list ✅ existing |
+| M-E3 | JSON-paste mode: add a server | Add server (JSON) → paste block → Save | server parsed and persisted ✅ existing |
+| M-E4 | Edit a builtin server | Edit github → change token → Save | token updated (verified via IPC) ✅ existing |
+| M-E5 | Legacy import on upgrade | Place a real `mcp-servers.json` → launch app | servers imported with tokens preserved — **manual** |
+| M-E6 | Adding a server + referencing it in a rule works | Add server, reference in rule, run | agent can call that server's tools — **manual** |
 
 ---
 
