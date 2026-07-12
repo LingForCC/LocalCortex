@@ -12,6 +12,11 @@
 import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
 import { HandoffSchema, CreateHandoffSchema } from './handoff-schema.js';
+import {
+  ComboSchema,
+  CreateComboSchema,
+  UpdateComboSchema,
+} from './combo-schema.js';
 import { APPEARANCES, CODEX_REASONING_EFFORTS } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
@@ -71,9 +76,13 @@ export const IPC = {
   MCP_SERVERS_UPSERT: 'mcp-servers:upsert',
   MCP_SERVERS_DELETE: 'mcp-servers:delete',
 
-  // --- Handoff setup --------------------------------------------------------
-  HANDOFF_SETUP_COMPLETE: 'handoff-setup:complete',
-  HANDOFF_SETUP_RESET: 'handoff-setup:reset',
+  // --- Combos (agent + task-manager + backend) -----------------------------
+  COMBOS_LIST: 'combos:list',
+  COMBOS_GET: 'combos:get',
+  COMBOS_CREATE: 'combos:create',
+  COMBOS_UPDATE: 'combos:update',
+  COMBOS_DELETE: 'combos:delete',
+  COMBOS_SET_ENABLED: 'combos:setEnabled',
 
   THEME_APPLY: 'theme:apply',
 } as const;
@@ -160,13 +169,6 @@ export const UpdateSettingsMessageSchema = z.object({
   codexModel: z.string().nullable().optional(),
   /** Codex reasoning effort. null clears back to the app default. */
   codexReasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().optional(),
-  // Handoff specialization — managed by handoff-setup:complete / reset, not the
-  // Settings view directly. Accepted here so they round-trip through the shared
-  // settings patch builder.
-  handoffAgentId: z.string().nullable().optional(),
-  handoffTaskManagerId: z.string().nullable().optional(),
-  handoffBackend: z.enum(['claude', 'codex']).nullable().optional(),
-  handoffRuleId: z.string().nullable().optional(),
 });
 
 /**
@@ -185,22 +187,18 @@ export const UpdateSettingsResultSchema = z.object({
 export const IdSchema = z.object({ id: z.string().min(1) });
 export const NameSchema = z.object({ name: z.string().min(1) });
 
-// --- Handoff setup ---------------------------------------------------------
+// --- Combos -----------------------------------------------------------------
 
-/** `handoff-setup:complete` — the three onboarding choices. */
-export const HandoffSetupCompleteSchema = z.object({
-  agentId: z.string().min(1),
-  taskManagerId: z.string().min(1),
-  backend: z.enum(['claude', 'codex']),
+export const ComboIdSchema = z.object({ id: z.string().min(1) });
+export const CreateComboMessageSchema = CreateComboSchema;
+export const UpdateComboMessageSchema = z.object({
+  id: z.string().min(1),
+  payload: UpdateComboSchema,
+});
+export const SetComboEnabledMessageSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
 });
 
-/** `handoff-setup:complete` result. */
-export const HandoffSetupResultSchema = z.object({
-  ok: z.boolean(),
-  error: z.string().optional(),
-  settings: z.any().optional(),
-  rule: z.any().optional(),
-});
-
-/** Inferred TS type for the handoff-setup:complete result. */
-export type HandoffSetupResult = z.infer<typeof HandoffSetupResultSchema>;
+/** Re-export the combo schemas/types for the preload + renderer. */
+export { ComboSchema, CreateComboSchema, UpdateComboSchema };

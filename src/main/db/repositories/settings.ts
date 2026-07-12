@@ -52,19 +52,6 @@ export class SettingsRepository {
             ] as AppSettings['codexReasoningEffort'],
           }
         : {}),
-      // Handoff specialization fields (all optional; absent until onboarding).
-      ...(typeof stored['handoffAgentId'] === 'string'
-        ? { handoffAgentId: stored['handoffAgentId'] }
-        : {}),
-      ...(typeof stored['handoffTaskManagerId'] === 'string'
-        ? { handoffTaskManagerId: stored['handoffTaskManagerId'] }
-        : {}),
-      ...(typeof stored['handoffBackend'] === 'string'
-        ? { handoffBackend: stored['handoffBackend'] as 'claude' | 'codex' }
-        : {}),
-      ...(typeof stored['handoffRuleId'] === 'string'
-        ? { handoffRuleId: stored['handoffRuleId'] }
-        : {}),
     });
   }
 
@@ -72,29 +59,6 @@ export class SettingsRepository {
   update(patch: Partial<AppSettings>): AppSettings {
     const current = this.get();
     const merged = { ...current, ...patch };
-    const validated = AppSettingsSchema.parse(merged);
-    this.db
-      .prepare(
-        `INSERT INTO app_settings (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      )
-      .run(SETTINGS_KEY, JSON.stringify(validated));
-    return validated;
-  }
-
-  /**
-   * Clear (remove from stored JSON) the handoff-specialization fields so a reset
-   * returns onboarding to its incomplete state. Unlike `update`, which can only
-   * *set* values (the spread merge keeps existing keys), this explicitly strips
-   * the four handoff keys from the persisted JSON.
-   */
-  clearHandoffFields(): AppSettings {
-    const current = this.get();
-    const merged: Record<string, unknown> = { ...current };
-    delete merged['handoffAgentId'];
-    delete merged['handoffTaskManagerId'];
-    delete merged['handoffBackend'];
-    delete merged['handoffRuleId'];
     const validated = AppSettingsSchema.parse(merged);
     this.db
       .prepare(

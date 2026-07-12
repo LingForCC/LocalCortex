@@ -57,23 +57,4 @@ export const AppSettingsSchema = z.object({
    * `modelReasoningEffort`. Codex-only; the Claude backend ignores it.
    */
   codexReasoningEffort: z.enum(CODEX_REASONING_EFFORTS).default(DEFAULT_CODEX_REASONING_EFFORT),
-
-  // --- Handoff specialization (docs/features/handoff-setup/README.md) -------
-  //
-  // The three onboarding choices that auto-create the handoff rule. All
-  // optional — onboarding is "complete" when all three are set. Storing them
-  // in settings (not a separate table) because there's exactly one active
-  // setup at a time.
-
-  /** Chosen coding-agent catalog id (event source). */
-  handoffAgentId: z.string().optional(),
-  /** Chosen task-manager catalog id (sink layer). */
-  handoffTaskManagerId: z.string().optional(),
-  /** Which backend fulfills the review rule. Independent of the agent source. */
-  handoffBackend: z.enum(['claude', 'codex']).optional(),
-  /**
-   * The id of the auto-created handoff rule. Stored so re-running setup updates
-   * the same rule in place (idempotent) rather than creating duplicates.
-   */
-  handoffRuleId: z.string().optional(),
 });

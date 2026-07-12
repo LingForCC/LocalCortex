@@ -1,58 +1,142 @@
-# Handoff setup
+# Combos & handoff setup
 
-The **handoff setup** is the first-run experience that specializes LocalCortex
-around its core use case: creating review subtasks automatically when a coding
-agent finishes a task. On first launch, the user makes three choices and the app
-auto-creates the underlying rule + MCP server wiring so the
-[handoff pipeline](../handoffs/README.md) works out of the box.
+A **combo** binds together the three choices that specialize LocalCortex around
+its core use case — creating review subtasks automatically when a coding agent
+finishes a task:
+
+| Choice | What it determines |
+| --- | --- |
+| **Coding agent** | The *event source* — which `session-complete` event type the rule listens to. |
+| **Task manager** | The *sink* — which MCP server the rule uses to create the review subtask. |
+| **Review-rule backend** | Which runner (Claude SDK or Codex SDK) *fulfills* the rule. |
+
+You can configure **multiple combos** and run them simultaneously. Each combo
+owns its own auto-created rule, and because each agent emits a *distinct*
+`session-complete` event type (`zcode.session-complete`, `codex.session-complete`,
+…), the matcher fires every matching rule independently. So you can have one
+combo routing ZCode sessions to OmniFocus and another routing Codex sessions to
+OmniFocus — both active at the same time, each configured separately.
+
+> Previously this feature was a **singleton**: exactly one combo, stored as four
+> scalar fields on `app_settings` plus one fixed-id rule (`handoff-auto`), set up
+> via a first-run onboarding wizard. Migration 006 moves to the multi-combo
+> model: combos live in their own table, the wizard is gone, and any existing
+> singleton setup is migrated into one combo row (see §Migration below).
 
 ---
 
-## The three choices
-
-Onboarding is a four-step wizard. Steps 1–3 are the three **orthogonal** choices;
-step 4 is a review/confirm screen.
-
-| Step | Choice | What it determines |
-| --- | --- | --- |
-| 1 | **Coding agent** | The *event source* — which `session-complete` event type the rule listens to. |
-| 2 | **Task manager** | The *sink* — which MCP server the rule uses to create the review subtask. |
-| 3 | **Review-rule backend** | Which runner (Claude SDK or Codex SDK) *fulfills* the rule. |
-| 4 | **Review & confirm** | Shows the agent's install instructions + the task manager's setup instructions, then finishes. |
+## The three choices (orthogonal)
 
 The three choices are **independent**. The agent you work in (e.g. ZCode) does
 not determine which SDK runs the review rule — you can use ZCode as your working
 agent and have the Codex SDK fulfill the review subtask, or vice versa.
 
-Onboarding is "complete" when all three are set. The app stores them in settings
-(`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`) and gates the main
-shell behind the wizard until they're set.
+A common multi-combo layout:
+
+| Combo | Agent | Task manager | Backend |
+| --- | --- | --- | --- |
+| ZCode → OmniFocus | ZCode | OmniFocus | Claude |
+| Codex → OmniFocus | Codex | OmniFocus | Codex |
+
+Both fire independently on their own agent's `session-complete` events.
 
 ---
 
-## What the setup creates
+## Managing combos
 
-When the user clicks **Finish**, `handoff-setup:complete` atomically:
+Combos are managed in the **Combos** tab (a primary tab in the shell). The UI is
+a standard list-CRUD table (mirrors Rules / Sources):
+
+- Each row shows the combo's label, agent, task manager, backend, an enable/disable
+  switch, and Edit / Delete actions.
+- **New combo** / **Edit** opens an inline editor with a label field and the three
+  pickers (agent, task manager, backend), reusing the same catalog picker
+  primitives (including "+ Add custom…") as before.
+- There is **no first-run wizard** and no onboarding gate — the app opens to the
+  normal shell, and an empty combo list simply prompts you to create one from the
+  Combos tab (or via Home → "Manage combos").
+
+The Home tab summarizes the configured combos and recent handoffs.
+
+---
+
+## What creating a combo does
+
+When you save a new combo, `combos:create` atomically:
 
 1. **Validates** the three choices against the DB catalog (agent, task manager,
    and the task manager's referenced MCP server all exist).
-2. **Creates or updates** the handoff rule (a normal `Rule`, id
-   `handoff-auto`) with:
-   - `trigger: { type: 'event', eventType: <agent>.sessionCompleteEventType`
+2. **Builds** a fresh rule (a normal `Rule`, per-combo UUID id) with:
+   - `trigger: { type: 'event', eventType: <agent>.sessionCompleteEventType }`
    - `backend: <chosen backend>`
    - `mcpServers: [<task manager>.mcpServerName]`
    - `sandbox: 'read-only'`
    - A default review-subtask prompt that renders `{{parentTaskId}}` from the
      handoff context.
-3. **Persists** the choices + rule id to settings.
+3. **Inserts** the rule, then the combo row (which references the rule via
+   `rule_id`).
 4. **Broadcasts** `rules:changed` so the scheduler refreshes.
 
 The rule is a **normal rule** — fully editable in the Rules tab (Advanced). It
 runs through the existing ingress → matcher → run-loop path. No new execution
 code was added for this feature.
 
-Re-running setup (via Home → "Change setup" or Settings → "Reset setup") updates
-the same rule in place (idempotent by the fixed `handoff-auto` id).
+### Combo ↔ rule ownership invariant
+
+The combo **owns** its rule but **preserves your edits**:
+
+- **Update combo** (agent / task manager / backend / label changed) → only the
+  combo-owned rule fields are overwritten (`trigger.eventType`, `mcpServers`,
+  `backend`, `name`). Your edits to the prompt, model, reasoning effort, sandbox,
+  workdir, maxRuns, expiresAt, and notes are preserved.
+- **Toggle enabled** → the flag is mirrored onto both the combo and its rule (the
+  scheduler fires rules, not combos, so the rule's `enabled` is what counts).
+- **Delete combo** → the rule is deleted first, then the combo.
+
+---
+
+## Storage: the `handoff_combos` table
+
+Combos live in a dedicated table ([migration 006](../../../src/main/db/migrations/006_handoff_combos.sql)),
+not in the `app_settings` JSON blob:
+
+```sql
+CREATE TABLE handoff_combos (
+  id              TEXT PRIMARY KEY,
+  label           TEXT NOT NULL,
+  agent_id        TEXT NOT NULL,          -- FK -> agents(id)        ON DELETE RESTRICT
+  task_manager_id TEXT NOT NULL,          -- FK -> task_managers(id) ON DELETE RESTRICT
+  backend         TEXT NOT NULL,          -- 'claude' | 'codex'
+  rule_id         TEXT NOT NULL,          -- FK -> rules(id)         ON DELETE CASCADE
+  enabled         INTEGER NOT NULL DEFAULT 1,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+FK enforcement is ON (`DB_PRAGMAS`), so a catalog row referenced by a combo
+can't be deleted while the combo exists. The repository + IPC layers are the
+only place that coordinates the combo and its rule (see the ownership invariant
+above).
+
+The four former `handoff*` fields have been **removed** from `AppSettings`.
+
+---
+
+## Migration of a legacy singleton setup
+
+Migration 006 copies any pre-existing singleton setup into one combo row, reusing
+the existing `handoff-auto` rule. It reads the four `handoff*` keys from the
+`app_settings` JSON blob via `json_extract` and inserts a combo with
+`id = 'combo-handoff-auto'` **only if**:
+
+- all four fields are present and non-empty (the setup was complete), **and**
+- the referenced rule row still exists in `rules` (guarded by an `IN (SELECT id
+  FROM rules)` subquery, because an FK violation would otherwise abort the whole
+  migration).
+
+If the setup was incomplete or the rule was already gone, nothing is migrated —
+the user simply starts fresh in the Combos tab. No data is lost in either case.
 
 ---
 
@@ -60,28 +144,29 @@ the same rule in place (idempotent by the fixed `handoff-auto` id).
 
 Agents, task managers, and MCP servers are all **DB-backed catalogs**, seeded by
 [migration 004](../../../src/main/db/migrations/004_catalog.sql). Each is
-CRUD-able in-app. This is the **zero-code extensibility path**:
+CRUD-able in-app (the combo editor's "+ Add custom…" buttons). This is the
+**zero-code extensibility path**:
 
 ### Adding a task manager (no code change)
 
 1. **Sources** tab → "Add server" → add the MCP server (form or paste JSON from
    the server's README).
-2. Onboarding step 2 (or the catalog form) → "Add custom…" → fill in the label,
-   description, select the MCP server, and provide setup instructions.
+2. Combos tab → edit/create a combo → task manager picker → "Add custom…" → fill
+   in the label, description, select the MCP server, and provide setup
+   instructions.
 
-The task manager is immediately selectable in onboarding. The run-loop resolves
-its MCP server from the same `mcp_servers` table at run time.
+The task manager is immediately selectable. The run-loop resolves its MCP server
+from the same `mcp_servers` table at run time.
 
 ### Adding a coding agent (no code change)
 
-1. Onboarding step 1 (or the catalog form) → "Add custom…" → fill in the label,
-   event types (`myagent.session-complete`, `myagent.prompt-submit`), source, and
-   install instructions.
+1. Combos tab → edit/create a combo → agent picker → "Add custom…" → fill in the
+   label, event types (`myagent.session-complete`, `myagent.prompt-submit`),
+   source, and install instructions.
 2. **On the agent side**, the user must install whatever hook/plugin makes the
-   agent emit those events (same as today — the app does not manage hook
-   deployment).
+   agent emit those events (the app does not manage hook deployment).
 
-The agent is immediately selectable in onboarding.
+The agent is immediately selectable. One agent can be used by multiple combos.
 
 ### Adding a fulfilling backend (code change)
 
@@ -91,63 +176,35 @@ branch in `buildRunnerProvider`. This is the [agent-layer extension path](../age
 
 ---
 
-## The onboarding gate
-
-`App.tsx` evaluates whether setup is complete after settings load. If incomplete,
-the wizard renders instead of the tabbed shell:
-
-```
-?view=handoff-prompt  → <HandoffPrompt/>   (popup, unchanged)
-setup incomplete       → <Onboarding/>
-otherwise              → <Shell/>
-```
-
-The wizard does not render before the settings DB read returns (no flash of the
-wrong screen).
-
----
-
-## Shell layout after onboarding
+## Shell layout
 
 The main window is organized around the handoff use case:
 
-- **Home** (default tab) — status card (agent, task manager, backend, rule
-  state) + recent handoffs + "Change setup".
+- **Home** (default tab) — combo summary (each agent → task manager → backend +
+  status) + recent handoffs + "Manage combos".
+- **Combos** — the combo list-CRUD table.
 - **Handoffs** — the existing handoff list panel.
 - **Run history** — the existing run observability view.
-- **Rules** *(Advanced)* — the existing rule editor. The auto-created
-  `handoff-auto` rule is visible and editable here.
-- **Sources** *(Advanced)* — the MCP server CRUD table (replaces the old
-  file viewer).
-- **Settings** — global settings + a "Handoff setup" section showing the current
-  choices with a reset button.
+- **Rules** *(Advanced)* — the existing rule editor. Each combo's auto-created
+  rule is visible and editable here.
+- **Sources** *(Advanced)* — the MCP server CRUD table.
+- **Settings** — global settings (tick interval, concurrency, appearance, CLI
+  paths, Codex model defaults).
 
----
+There is no longer an onboarding gate — the shell always renders, and the popup
+window branch (`?view=handoff-prompt`) is unchanged:
 
-## MCP servers: from file to DB
-
-This feature retired the static `~/.localcortex/mcp-servers.json` file. MCP
-server definitions now live in the `mcp_servers` DB table — the single source of
-truth. The Sources tab provides a CRUD interface with two input modes:
-
-- **Form mode:** name, command, args (one per line), env key/value rows.
-- **JSON-paste mode:** paste the exact `{ command, args, env }` block (the same
-  shape as the old file entry), parsed into the row.
-
-On upgrade, a one-time import reads any existing `mcp-servers.json` and inserts
-its servers (idempotent by name), preserving real tokens. See
-[mcp-sources](../mcp-sources/README.md) for details.
-
-The MCP *machinery* (resolver, per-backend serialization, lifecycle manager,
-run-loop) is unchanged — it consumes the same config object shape, just sourced
-from the DB instead of a file.
+```
+?view=handoff-prompt  → <HandoffPrompt/>   (popup, unchanged)
+otherwise             → <Shell/>
+```
 
 ---
 
 ## Related
 
-- [Handoffs](../handoffs/README.md) — the review-subtask pipeline this setup powers.
-- [Rules](../rules/README.md) — the auto-created rule is a normal rule.
+- [Handoffs](../handoffs/README.md) — the review-subtask pipeline combos power.
+- [Rules](../rules/README.md) — each combo's auto-created rule is a normal rule.
 - [MCP sources](../mcp-sources/README.md) — the DB-backed MCP server catalog.
 - [Agent backends](../agent-backends/README.md) — the Claude/Codex runners.
-- [Settings](../settings/README.md) — global settings, now including handoff fields.
+- [Settings](../settings/README.md) — global settings.

@@ -1,10 +1,11 @@
 /**
- * Home dashboard — the default tab after onboarding.
+ * Home dashboard — the default tab.
  *
  * Spec: docs/features/handoff-setup/README.md.
  *
- * Shows the current handoff setup (agent, task manager, backend, rule status)
- * and recent handoffs. A "Change setup" button re-opens the onboarding wizard.
+ * Summarizes the configured combos (each agent → task manager → backend) and
+ * recent handoffs. Combos themselves are created/edited in the Combos tab; when
+ * none exist, this view points the user there.
  */
 
 import * as React from 'react';
@@ -12,36 +13,19 @@ import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useHandoffsStore } from '@renderer/store/handoffs';
-import { useRulesStore } from '@renderer/store/rules';
-import { useSettingsStore } from '@renderer/store/settings';
+import { useCombosStore } from '@renderer/store/combos';
 import type { AgentEntry, TaskManagerEntry } from '@shared/types';
 
-export function Home({ onChangeSetup }: { onChangeSetup: () => void }): React.ReactElement {
-  const settings = useSettingsStore((s) => s.settings);
-  const loadSettings = useSettingsStore((s) => s.load);
+export function Home({ onGoToCombos }: { onGoToCombos: () => void }): React.ReactElement {
+  const combos = useCombosStore((s) => s.combos);
+  const loadCombos = useCombosStore((s) => s.load);
   const handoffs = useHandoffsStore((s) => s.handoffs);
   const loadHandoffs = useHandoffsStore((s) => s.load);
-  const rules = useRulesStore((s) => s.rules);
-  const loadRules = useRulesStore((s) => s.load);
-  const [agent, setAgent] = React.useState<AgentEntry | null>(null);
-  const [taskManager, setTaskManager] = React.useState<TaskManagerEntry | null>(null);
 
   React.useEffect(() => {
-    void Promise.all([loadSettings(), loadHandoffs(), loadRules()]);
-  }, [loadSettings, loadHandoffs, loadRules]);
+    void Promise.all([loadCombos(), loadHandoffs()]);
+  }, [loadCombos, loadHandoffs]);
 
-  React.useEffect(() => {
-    void (async () => {
-      if (settings.handoffAgentId) {
-        setAgent(await window.api.agents.get(settings.handoffAgentId));
-      }
-      if (settings.handoffTaskManagerId) {
-        setTaskManager(await window.api.taskManagers.get(settings.handoffTaskManagerId));
-      }
-    })();
-  }, [settings.handoffAgentId, settings.handoffTaskManagerId]);
-
-  const handoffRule = rules.find((r) => r.id === settings.handoffRuleId) ?? null;
   const recentHandoffs = handoffs.slice(0, 5);
 
   return (
@@ -49,35 +33,20 @@ export function Home({ onChangeSetup }: { onChangeSetup: () => void }): React.Re
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Handoff setup</CardTitle>
-            <Button variant="outline" size="sm" onClick={onChangeSetup}>
-              Change setup
+            <CardTitle>Combos</CardTitle>
+            <Button variant="outline" size="sm" onClick={onGoToCombos}>
+              Manage combos
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Row label="Coding agent" value={agent?.label ?? '—'} />
-          <Row label="Task manager" value={taskManager?.label ?? '—'} />
-          <Row
-            label="Review backend"
-            value={
-              settings.handoffBackend === 'claude'
-                ? 'Claude'
-                : settings.handoffBackend === 'codex'
-                  ? 'Codex'
-                  : '—'
-            }
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Handoff rule</span>
-            {handoffRule ? (
-              <Badge variant={handoffRule.enabled ? 'secondary' : 'outline'}>
-                {handoffRule.enabled ? 'Active' : 'Disabled'}
-              </Badge>
-            ) : (
-              <span className="text-sm">—</span>
-            )}
-          </div>
+          {combos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No combos configured. Visit the Combos tab to set one up.
+            </p>
+          ) : (
+            combos.map((c) => <ComboSummaryRow key={c.id} comboId={c.id} label={c.label} agentId={c.agentId} taskManagerId={c.taskManagerId} backend={c.backend} enabled={c.enabled} />)
+          )}
         </CardContent>
       </Card>
 
@@ -87,14 +56,14 @@ export function Home({ onChangeSetup }: { onChangeSetup: () => void }): React.Re
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
-            1. When you start prompting your coding agent, a handoff popup appears. Attach it to a
+            1. When you start prompting a coding agent, a handoff popup appears. Attach it to a
             parent task (e.g. <code className="text-xs">parentTaskId</code>).
           </p>
           <p>
-            2. When the session completes, the handoff rule fires automatically and creates a review
-            subtask in {taskManager?.label ?? 'your task manager'}.
+            2. When the session completes, each matching combo’s rule fires automatically and
+            creates a review subtask in its task manager.
           </p>
-          <p>3. Review the agent's work at your leisure — the subtask reminds you.</p>
+          <p>3. Review the agent’s work at your leisure — the subtask reminds you.</p>
         </CardContent>
       </Card>
 
@@ -126,11 +95,36 @@ export function Home({ onChangeSetup }: { onChangeSetup: () => void }): React.Re
   );
 }
 
-function Row({ label, value }: { label: string; value: string }): React.ReactElement {
+function ComboSummaryRow(props: {
+  comboId: string;
+  label: string;
+  agentId: string;
+  taskManagerId: string;
+  backend: 'claude' | 'codex';
+  enabled: boolean;
+}): React.ReactElement {
+  const [agent, setAgent] = React.useState<AgentEntry | null>(null);
+  const [taskManager, setTaskManager] = React.useState<TaskManagerEntry | null>(null);
+
+  React.useEffect(() => {
+    void (async () => {
+      setAgent(await window.api.agents.get(props.agentId));
+      setTaskManager(await window.api.taskManagers.get(props.taskManagerId));
+    })();
+  }, [props.agentId, props.taskManagerId]);
+
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
+      <span className="text-sm font-medium">{props.label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">
+          {agent?.label ?? props.agentId} → {taskManager?.label ?? props.taskManagerId}
+        </span>
+        <Badge variant="outline">{props.backend}</Badge>
+        <Badge variant={props.enabled ? 'secondary' : 'outline'}>
+          {props.enabled ? 'Active' : 'Disabled'}
+        </Badge>
+      </div>
     </div>
   );
 }

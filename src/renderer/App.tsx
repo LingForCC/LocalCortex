@@ -1,14 +1,10 @@
 /**
- * App shell — onboarding gate + nav between Home / Handoffs / Run history /
- * Rules / Sources / Settings.
+ * App shell — nav between Home / Combos / Handoffs / Run history / Rules /
+ * Sources / Settings.
  *
  * The same renderer entry is reused for the prompt-submit handoff popup: when
  * loaded with `?view=handoff-prompt`, we render <HandoffPrompt/> instead of the
  * tabbed shell (see src/main/index.ts openHandoffPrompt).
- *
- * Onboarding gate: when handoff setup is incomplete (any of handoffAgentId /
- * handoffTaskManagerId / handoffBackend unset), the shell renders <Onboarding/>
- * instead of the tabbed shell.
  */
 
 import * as React from 'react';
@@ -19,11 +15,11 @@ import { Handoffs } from './views/Handoffs';
 import { HandoffPrompt } from './views/HandoffPrompt';
 import { Sources } from './views/Sources';
 import { Settings } from './views/Settings';
-import { Onboarding } from './views/Onboarding';
+import { Combos } from './views/Combos';
 import { Home } from './views/Home';
 import { useSettingsStore } from './store/settings';
 
-type Tab = 'home' | 'rules' | 'runs' | 'handoffs' | 'sources' | 'settings';
+type Tab = 'home' | 'combos' | 'rules' | 'runs' | 'handoffs' | 'sources' | 'settings';
 
 interface TabDef {
   id: Tab;
@@ -33,6 +29,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: 'home', label: 'Home' },
+  { id: 'combos', label: 'Combos' },
   { id: 'handoffs', label: 'Handoffs' },
   { id: 'runs', label: 'Run history' },
   { id: 'rules', label: 'Rules', advanced: true },
@@ -46,11 +43,6 @@ function readView(): string | null {
   return new URLSearchParams(window.location.search).get('view');
 }
 
-/** True iff all three handoff onboarding choices are set. */
-function isSetupComplete(s: { handoffAgentId?: string; handoffTaskManagerId?: string; handoffBackend?: string }): boolean {
-  return !!(s.handoffAgentId && s.handoffTaskManagerId && s.handoffBackend);
-}
-
 export function App() {
   // Popup window: skip the tabbed shell entirely.
   if (readView() === 'handoff-prompt') {
@@ -62,16 +54,13 @@ export function App() {
 
 function Shell() {
   const [tab, setTab] = React.useState<Tab>('home');
-  const [forceOnboarding, setForceOnboarding] = React.useState(false);
-  const [settingsLoaded, setSettingsLoaded] = React.useState(false);
-  const settings = useSettingsStore((s) => s.settings);
-  const loadSettings = useSettingsStore((s) => s.load);
 
-  // Load settings on mount so we can evaluate the onboarding gate.
+  // Load settings on mount so the persisted appearance is applied. (The shell
+  // no longer gates on setup being complete — combos are managed in the Combos
+  // tab and may legitimately be empty on first run.)
+  const loadSettings = useSettingsStore((s) => s.load);
   React.useEffect(() => {
-    void loadSettings().then(() => {
-      setSettingsLoaded(true);
-    });
+    void loadSettings();
   }, [loadSettings]);
 
   // Apply the effective dark-mode state from Electron's nativeTheme.
@@ -82,25 +71,6 @@ function Shell() {
     const off = window.api.theme.onApply(apply);
     return off;
   }, []);
-
-  // Onboarding gate: show the wizard when setup is incomplete (and settings
-  // have loaded so we don't flash onboarding before the DB read returns).
-  // Subscribing to `settings` reactively means the gate re-evaluates after
-  // onboarding reloads the store.
-  if (settingsLoaded && (forceOnboarding || !isSetupComplete(settings))) {
-    return (
-      <Onboarding
-        onDone={() => {
-          // Reload settings so the store reflects the newly-persisted handoff
-          // choices; the reactive subscription makes the gate flip to the shell.
-          void loadSettings().then(() => {
-            setForceOnboarding(false);
-            setTab('home');
-          });
-        }}
-      />
-    );
-  }
 
   // Separate the primary tabs from the advanced ones.
   const primaryTabs = TABS.filter((t) => !t.advanced);
@@ -123,7 +93,8 @@ function Shell() {
       </aside>
 
       <main className="flex-1 overflow-auto p-6">
-        {tab === 'home' && <Home onChangeSetup={() => setForceOnboarding(true)} />}
+        {tab === 'home' && <Home onGoToCombos={() => setTab('combos')} />}
+        {tab === 'combos' && <Combos />}
         {tab === 'rules' && <RuleList />}
         {tab === 'runs' && <RunHistory />}
         {tab === 'handoffs' && <Handoffs />}

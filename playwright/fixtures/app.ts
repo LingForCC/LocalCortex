@@ -55,20 +55,23 @@ export interface AppFixture {
    */
   relaunch: () => Promise<void>;
   /**
-   * Complete the handoff onboarding wizard via the UI (select agent → task
-   * manager → backend → Finish) so the shell is reachable. A fresh DB shows
-   * the wizard before anything else, so specs that test the shell (Rules,
-   * Settings, Sources, …) must call this first. Idempotent: if the shell is
-   * already showing, it's a no-op.
+   * Create a handoff combo via the Combos tab UI (label → pick agent → task
+   * manager → backend → Create) so a combo + its auto-created rule exist. The
+   * app no longer has a first-run wizard — the shell is always reachable — but
+   * most specs still want a combo present (e.g. to exercise the rule it owns).
+   *
+   * Idempotent: if a combo already exists, it's a no-op.
    *
    * @param opts.agent     Agent id to select (default: the first builtin, 'zcode').
    * @param opts.taskManager Task manager id (default: the first builtin, 'omnifocus').
    * @param opts.backend   Review-rule backend (default: 'claude').
+   * @param opts.label     Combo label (default: 'Test combo').
    */
   completeOnboarding: (opts?: {
     agent?: string;
     taskManager?: string;
     backend?: string;
+    label?: string;
   }) => Promise<void>;
 }
 
@@ -130,40 +133,55 @@ export const test = base.extend<{ app: AppFixture }>({
         agent?: string;
         taskManager?: string;
         backend?: string;
+        label?: string;
       }) => {
         const agent = opts?.agent ?? 'zcode';
         const taskManager = opts?.taskManager ?? 'omnifocus';
         const backend = opts?.backend ?? 'Claude';
+        const label = opts?.label ?? 'Test combo';
 
-        // If the shell is already showing (setup complete), do nothing.
-        // Detect the wizard by the "Welcome to LocalCortex" heading.
-        const isOnboarding = await window
-          .getByRole('heading', { name: 'Welcome to LocalCortex' })
+        // The app no longer gates on a wizard — the shell is always visible.
+        // Navigate to the Combos tab; if a combo with the same label already
+        // exists, treat it as idempotent and skip. (Checking "any combo exists"
+        // would break specs that legitimately create multiple combos.)
+        // exact: true because the Home tab also has a "Manage combos" button,
+        // which substring-matches name: 'Combos' and trips strict mode.
+        await window.getByRole('button', { name: 'Combos', exact: true }).click();
+        const labelExists = await window
+          .getByText(label, { exact: true })
+          .first()
           .isVisible()
           .catch(() => false);
-        if (!isOnboarding) return;
+        if (labelExists) return;
 
-        // Step 1: pick agent.
+        // Open the new-combo editor.
+        await window.getByRole('button', { name: 'New combo' }).click();
+
+        // Fill the label.
+        await window.getByLabel('Label').fill(label);
+
+        // Pick agent (card aria-label is the agent label, e.g. "ZCode"). Anchored
+        // to the full label so it doesn't collide with the backend card (which is
+        // also a radio and, for Codex, starts with "Codex").
         await window.getByRole('radio', { name: new RegExp(`^${agent}$`, 'i') }).click();
-        await window.getByRole('button', { name: 'Next' }).click();
 
-        // Step 2: pick task manager.
+        // Pick task manager.
         await window.getByRole('radio', { name: new RegExp(`^${taskManager}$`, 'i') }).click();
-        await window.getByRole('button', { name: 'Next' }).click();
 
-        // Step 3: pick backend (match on the card's aria-label, which is the
-        // backend label string, e.g. "Claude (Claude Code SDK)").
-        await window.getByRole('radio', { name: new RegExp(`^${backend}`, 'i') }).click();
-        await window.getByRole('button', { name: 'Next' }).click();
+        // Pick backend (card aria-label is "<Name> (<SDK>)", e.g.
+        // "Claude (Claude Code SDK)"). Match the opening paren so this never
+        // collides with an agent card of the same short name (e.g. "Codex").
+        await window.getByRole('radio', { name: new RegExp(`^${backend} \\(`, 'i') }).click();
 
-        // Step 4: review & Finish.
-        await window.getByRole('button', { name: 'Finish' }).click();
+        // Save.
+        await window.getByRole('button', { name: 'Create combo' }).click();
 
-        // Wait for the shell to fully render: the sidebar appears AND the Home
-        // tab content is visible. Waiting only for the sidebar button can race
-        // with the React re-render after onboarding completes.
-        await expect(window.getByRole('button', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
-        await expect(window.getByText('Handoff setup')).toBeVisible({ timeout: 10_000 });
+        // Wait for the combo list to re-render (the Edit button for the new row
+        // appears) and return to Home so the caller starts from a known tab.
+        await expect(window.getByRole('button', { name: 'Edit' }).first()).toBeVisible({
+          timeout: 10_000,
+        });
+        await window.getByRole('button', { name: 'Home' }).click();
       },
     };
 

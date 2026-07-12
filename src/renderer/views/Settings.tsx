@@ -17,45 +17,12 @@ import { Select } from '@renderer/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useSettingsStore } from '@renderer/store/settings';
 import { APPEARANCES, CODEX_REASONING_EFFORTS } from '@shared/constants';
-import type { AppSettings, AgentEntry, TaskManagerEntry } from '@shared/types';
+import type { AppSettings } from '@shared/types';
 
 export function Settings() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
   const load = useSettingsStore((s) => s.load);
-  const [agent, setAgent] = React.useState<AgentEntry | null>(null);
-  const [taskManager, setTaskManager] = React.useState<TaskManagerEntry | null>(null);
-  const [resetBusy, setResetBusy] = React.useState(false);
-  const [resetError, setResetError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    void (async () => {
-      if (settings.handoffAgentId) {
-        setAgent(await window.api.agents.get(settings.handoffAgentId));
-      } else {
-        setAgent(null);
-      }
-      if (settings.handoffTaskManagerId) {
-        setTaskManager(await window.api.taskManagers.get(settings.handoffTaskManagerId));
-      } else {
-        setTaskManager(null);
-      }
-    })();
-  }, [settings.handoffAgentId, settings.handoffTaskManagerId]);
-
-  const handleReset = async (): Promise<void> => {
-    if (!confirm('Reset handoff setup? You can re-run onboarding from the Home tab.')) return;
-    setResetBusy(true);
-    setResetError(null);
-    try {
-      await window.api.handoffSetup.reset();
-      await load();
-    } catch (e) {
-      setResetError((e as Error).message);
-    } finally {
-      setResetBusy(false);
-    }
-  };
 
   const [tick, setTick] = React.useState(String(settings.tickIntervalSeconds));
   const [concurrency, setConcurrency] = React.useState(String(settings.concurrency));
@@ -105,43 +72,6 @@ export function Settings() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Handoff setup</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Coding agent</span>
-            <span className="text-sm font-medium">{agent?.label ?? 'Not set'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Task manager</span>
-            <span className="text-sm font-medium">{taskManager?.label ?? 'Not set'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Review backend</span>
-            <span className="text-sm font-medium">
-              {settings.handoffBackend
-                ? settings.handoffBackend === 'claude'
-                  ? 'Claude'
-                  : 'Codex'
-                : 'Not set'}
-            </span>
-          </div>
-          {resetError && <p className="text-sm text-destructive">{resetError}</p>}
-          <div className="flex justify-end pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resetBusy}
-              onClick={() => void handleReset()}
-            >
-              {resetBusy ? 'Resetting…' : 'Reset setup'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>Global settings</CardTitle>

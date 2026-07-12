@@ -9,13 +9,16 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '@shared/schemas/ipc-schema';
-import type { HandoffPromptPayload, HandoffSetupResult } from '@shared/schemas/ipc-schema';
+import type { HandoffPromptPayload } from '@shared/schemas/ipc-schema';
 import type {
   Rule,
   Run,
   AppSettings,
   RuleWithBookkeeping,
   Handoff,
+  Combo,
+  CreateCombo,
+  UpdateCombo,
   AgentEntry,
   TaskManagerEntry,
   McpServerEntry,
@@ -116,14 +119,24 @@ const api = {
       ipcRenderer.invoke(IPC.MCP_SERVERS_DELETE, { name }),
   },
 
-  // --- Handoff setup --------------------------------------------------------
-  handoffSetup: {
-    complete: (input: {
-      agentId: string;
-      taskManagerId: string;
-      backend: 'claude' | 'codex';
-    }): Promise<HandoffSetupResult> => ipcRenderer.invoke(IPC.HANDOFF_SETUP_COMPLETE, input),
-    reset: (): Promise<HandoffSetupResult> => ipcRenderer.invoke(IPC.HANDOFF_SETUP_RESET),
+  // --- Combos (agent + task-manager + backend) ------------------------------
+  combos: {
+    list: (): Promise<Combo[]> => ipcRenderer.invoke(IPC.COMBOS_LIST),
+    get: (id: string): Promise<Combo | null> => ipcRenderer.invoke(IPC.COMBOS_GET, { id }),
+    create: (input: CreateCombo): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
+      ipcRenderer.invoke(IPC.COMBOS_CREATE, input),
+    update: (
+      id: string,
+      payload: UpdateCombo,
+    ): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
+      ipcRenderer.invoke(IPC.COMBOS_UPDATE, { id, payload }),
+    delete: (id: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.COMBOS_DELETE, { id }),
+    setEnabled: (
+      id: string,
+      enabled: boolean,
+    ): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
+      ipcRenderer.invoke(IPC.COMBOS_SET_ENABLED, { id, enabled }),
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),

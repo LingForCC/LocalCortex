@@ -23,6 +23,11 @@ import type {
 } from './schemas/mcp-config-schema.js';
 import type { RunSchema } from './schemas/run-schema.js';
 import type { HandoffSchema } from './schemas/handoff-schema.js';
+import type {
+  ComboSchema,
+  CreateComboSchema,
+  UpdateComboSchema,
+} from './schemas/combo-schema.js';
 import type { AppSettingsSchema } from './schemas/settings-schema.js';
 import type { AgentSchema } from './schemas/agent-schema.js';
 import type { TaskManagerSchema } from './schemas/task-manager-schema.js';
@@ -101,6 +106,13 @@ export type RunStatus = 'success' | 'error';
 
 /** A registered agent-session handoff (pending_reviews row). */
 export type Handoff = z.infer<typeof HandoffSchema>;
+
+// --- Combos (agent + task-manager + backend) --------------------------------
+
+/** A configured combo owning one auto-created rule (handoff_combos row). */
+export type Combo = z.infer<typeof ComboSchema>;
+export type CreateCombo = z.infer<typeof CreateComboSchema>;
+export type UpdateCombo = z.infer<typeof UpdateComboSchema>;
 
 // --- Global settings (architecture.md §6.4, §6.5) --------------------------
 
