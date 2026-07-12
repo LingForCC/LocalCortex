@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildHandoffRule,
-  applyComboFieldsToRule,
+  buildHandoffProfileRule,
+  applyProfileFieldsToRule,
   HANDOFF_RULE_NAME,
   DEFAULT_HANDOFF_RULE_TEXT,
-} from './setup-builder.js';
+} from './profile-builder.js';
 import { RuleSchema } from '@shared/schemas/rule-schema';
 import type { AgentEntry, TaskManagerEntry, Rule } from '@shared/types';
 
@@ -40,24 +40,24 @@ function makeTaskManager(overrides: Partial<TaskManagerEntry> = {}): TaskManager
   };
 }
 
-describe('buildHandoffRule', () => {
+describe('buildHandoffProfileRule', () => {
   it('builds a rule with the correct trigger from the agent', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
     expect(rule.trigger).toEqual({ type: 'event', eventType: 'zcode.session-complete' });
   });
 
-  it('uses the caller-supplied per-combo id', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'combo-xyz' });
-    expect(rule.id).toBe('combo-xyz');
+  it('uses the caller-supplied per-profile id', () => {
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'profile-xyz' });
+    expect(rule.id).toBe('profile-xyz');
   });
 
   it('defaults the name when none is provided', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
     expect(rule.name).toBe(HANDOFF_RULE_NAME);
   });
 
   it('honors a caller-supplied name', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', {
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', {
       id: 'r1',
       name: 'ZCode → OmniFocus',
     });
@@ -65,20 +65,20 @@ describe('buildHandoffRule', () => {
   });
 
   it('uses the agent session-complete event type (not prompt-submit)', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r1' });
     expect(rule.trigger.type).toBe('event');
     expect((rule.trigger as { eventType: string }).eventType).toBe('zcode.session-complete');
   });
 
   it('uses the independently-chosen backend (not derived from the agent)', () => {
-    const claudeRule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
-    const codexRule = buildHandoffRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r2' });
+    const claudeRule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const codexRule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r2' });
     expect(claudeRule.backend).toBe('claude');
     expect(codexRule.backend).toBe('codex');
   });
 
   it('references the task manager MCP server name', () => {
-    const rule = buildHandoffRule(
+    const rule = buildHandoffProfileRule(
       makeAgent(),
       makeTaskManager({ mcpServerName: 'todoist' }),
       'claude',
@@ -88,22 +88,22 @@ describe('buildHandoffRule', () => {
   });
 
   it('defaults to read-only sandbox', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
     expect(rule.sandbox).toBe('read-only');
   });
 
   it('uses the default review-subtask prompt text', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
     expect(rule.rule).toBe(DEFAULT_HANDOFF_RULE_TEXT);
   });
 
   it('is enabled by default', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
     expect(rule.enabled).toBe(true);
   });
 
   it('references agent and task manager labels in notes', () => {
-    const rule = buildHandoffRule(
+    const rule = buildHandoffProfileRule(
       makeAgent({ label: 'My Agent' }),
       makeTaskManager({ label: 'My TM' }),
       'claude',
@@ -114,15 +114,15 @@ describe('buildHandoffRule', () => {
   });
 
   it('passes validation through RuleSchema (no parse error)', () => {
-    const rule = buildHandoffRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r1' });
+    const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'codex', { id: 'r1' });
     expect(() => RuleSchema.parse(rule)).not.toThrow();
   });
 });
 
-describe('applyComboFieldsToRule', () => {
+describe('applyProfileFieldsToRule', () => {
   function makeEditedRule(overrides: Partial<Rule> = {}): Rule {
     return {
-      ...buildHandoffRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' }),
+      ...buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' }),
       rule: 'CUSTOM PROMPT — do not clobber',
       model: 'gpt-5',
       modelReasoningEffort: 'high',
@@ -131,9 +131,9 @@ describe('applyComboFieldsToRule', () => {
     };
   }
 
-  it('overwrites only the combo-owned trigger / servers / backend', () => {
+  it('overwrites only the profile-owned trigger / servers / backend', () => {
     const original = makeEditedRule();
-    const updated = applyComboFieldsToRule(
+    const updated = applyProfileFieldsToRule(
       original,
       makeAgent({ id: 'codex', sessionCompleteEventType: 'codex.session-complete' }),
       makeTaskManager({ mcpServerName: 'todoist' }),
@@ -147,7 +147,7 @@ describe('applyComboFieldsToRule', () => {
 
   it('preserves user-edited prompt, model, and notes', () => {
     const original = makeEditedRule();
-    const updated = applyComboFieldsToRule(
+    const updated = applyProfileFieldsToRule(
       original,
       makeAgent({ sessionCompleteEventType: 'codex.session-complete' }),
       makeTaskManager(),
@@ -162,7 +162,7 @@ describe('applyComboFieldsToRule', () => {
 
   it('preserves the existing id and enabled flag', () => {
     const original = makeEditedRule({ id: 'r1', enabled: false });
-    const updated = applyComboFieldsToRule(
+    const updated = applyProfileFieldsToRule(
       original,
       makeAgent({ sessionCompleteEventType: 'codex.session-complete' }),
       makeTaskManager(),
@@ -176,23 +176,23 @@ describe('applyComboFieldsToRule', () => {
   it('updates the name when provided, preserves it otherwise', () => {
     const original = makeEditedRule({ name: 'Old name' });
     expect(
-      applyComboFieldsToRule(original, makeAgent(), makeTaskManager(), 'claude', {
+      applyProfileFieldsToRule(original, makeAgent(), makeTaskManager(), 'claude', {
         name: 'New name',
       }).name,
     ).toBe('New name');
     expect(
-      applyComboFieldsToRule(original, makeAgent(), makeTaskManager(), 'claude', {}).name,
+      applyProfileFieldsToRule(original, makeAgent(), makeTaskManager(), 'claude', {}).name,
     ).toBe('Old name');
   });
 
   it('result passes RuleSchema validation', () => {
     const original = makeEditedRule();
-    const updated = applyComboFieldsToRule(
+    const updated = applyProfileFieldsToRule(
       original,
       makeAgent({ sessionCompleteEventType: 'codex.session-complete' }),
       makeTaskManager({ mcpServerName: 'todoist' }),
       'codex',
-      { name: 'Codex combo' },
+      { name: 'Codex profile' },
     );
     expect(() => RuleSchema.parse(updated)).not.toThrow();
   });

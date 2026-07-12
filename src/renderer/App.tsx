@@ -1,6 +1,6 @@
 /**
- * App shell — nav between Home / Combos / Handoffs / Run history / Rules /
- * Sources / Settings.
+ * App shell — nav between Home / Handoff profiles / Handoffs / Run history /
+ * Rules / Sources / Settings.
  *
  * The same renderer entry is reused for the prompt-submit handoff popup: when
  * loaded with `?view=handoff-prompt`, we render <HandoffPrompt/> instead of the
@@ -15,11 +15,11 @@ import { Handoffs } from './views/Handoffs';
 import { HandoffPrompt } from './views/HandoffPrompt';
 import { Sources } from './views/Sources';
 import { Settings } from './views/Settings';
-import { Combos } from './views/Combos';
+import { HandoffProfiles } from './views/HandoffProfiles';
 import { Home } from './views/Home';
 import { useSettingsStore } from './store/settings';
 
-type Tab = 'home' | 'combos' | 'rules' | 'runs' | 'handoffs' | 'sources' | 'settings';
+type Tab = 'home' | 'handoffProfiles' | 'rules' | 'runs' | 'handoffs' | 'sources' | 'settings';
 
 interface TabDef {
   id: Tab;
@@ -29,7 +29,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: 'home', label: 'Home' },
-  { id: 'combos', label: 'Combos' },
+  { id: 'handoffProfiles', label: 'Handoff profiles' },
   { id: 'handoffs', label: 'Handoffs' },
   { id: 'runs', label: 'Run history' },
   { id: 'rules', label: 'Rules', advanced: true },
@@ -56,8 +56,8 @@ function Shell() {
   const [tab, setTab] = React.useState<Tab>('home');
 
   // Load settings on mount so the persisted appearance is applied. (The shell
-  // no longer gates on setup being complete — combos are managed in the Combos
-  // tab and may legitimately be empty on first run.)
+  // no longer gates on setup being complete — handoff profiles are managed in
+  // the Handoff profiles tab and may legitimately be empty on first run.)
   const loadSettings = useSettingsStore((s) => s.load);
   React.useEffect(() => {
     void loadSettings();
@@ -93,8 +93,8 @@ function Shell() {
       </aside>
 
       <main className="flex-1 overflow-auto p-6">
-        {tab === 'home' && <Home onGoToCombos={() => setTab('combos')} />}
-        {tab === 'combos' && <Combos />}
+        {tab === 'home' && <Home onGoToHandoffProfiles={() => setTab('handoffProfiles')} />}
+        {tab === 'handoffProfiles' && <HandoffProfiles />}
         {tab === 'rules' && <RuleList />}
         {tab === 'runs' && <RunHistory />}
         {tab === 'handoffs' && <Handoffs />}

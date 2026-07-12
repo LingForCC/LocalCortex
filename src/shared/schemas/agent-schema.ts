@@ -7,7 +7,7 @@
  * The user is responsible for making their agent actually emit the events
  * (installing the hook/plugin on the agent side).
  *
- * Spec: docs/features/handoff-setup/README.md.
+ * Spec: docs/features/handoff-profiles/README.md.
  */
 
 import { z } from 'zod';

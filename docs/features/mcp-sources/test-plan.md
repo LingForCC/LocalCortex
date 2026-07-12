@@ -18,7 +18,7 @@ serialization** (Claude + Codex TOML), and **placeholder-token detection**.
 ## Out of scope (covered elsewhere)
 
 - Actually spawning MCP server processes → exercised only via real agent runs (see [Agent backends](../agent-backends/test-plan.md)).
-- Onboarding wizard interactions with the catalog → [Handoff setup](../handoff-setup/test-plan.md).
+- Profile editor interactions with the catalog → [Handoff profiles](../handoff-profiles/test-plan.md).
 
 ---
 
@@ -146,4 +146,4 @@ serializers, or the Sources UI.
 
 ## Related
 - [MCP sources README](./README.md) — authoritative config-format reference.
-- [Handoff setup test plan](../handoff-setup/test-plan.md) (onboarding wizard interactions with the catalog)
+- [Handoff profiles test plan](../handoff-profiles/test-plan.md) (profile editor interactions with the catalog)

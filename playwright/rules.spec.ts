@@ -120,7 +120,7 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
     window.once('dialog', (d) => void d.accept());
     await createRuleViaUi(window, { name: 'Delete me' });
 
-    // Scope Delete to the specific row (the combo's auto-created rule also has a Delete).
+    // Scope Delete to the specific row (the handoff profile's auto-created rule also has a Delete).
     await window
       .getByRole('row', { name: /Delete me/ })
       .getByRole('button', { name: 'Delete' })
@@ -141,7 +141,7 @@ test.describe('Rules CRUD (R-E1..R-E5)', () => {
     // The client-side guard renders a destructive error paragraph.
     await expect(window.getByText(/required/i)).toBeVisible();
 
-    // Cancel back to the list. The combo's auto-created rule is still there,
+    // Cancel back to the list. The handoff profile's auto-created rule is still there,
     // so we assert the editor is gone (no Create/Cancel button) rather than
     // the old "No rules yet" empty state.
     await window.getByRole('button', { name: 'Cancel' }).click();

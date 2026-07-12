@@ -16,9 +16,9 @@ import type {
   AppSettings,
   RuleWithBookkeeping,
   Handoff,
-  Combo,
-  CreateCombo,
-  UpdateCombo,
+  HandoffProfile,
+  CreateHandoffProfile,
+  UpdateHandoffProfile,
   AgentEntry,
   TaskManagerEntry,
   McpServerEntry,
@@ -119,24 +119,24 @@ const api = {
       ipcRenderer.invoke(IPC.MCP_SERVERS_DELETE, { name }),
   },
 
-  // --- Combos (agent + task-manager + backend) ------------------------------
-  combos: {
-    list: (): Promise<Combo[]> => ipcRenderer.invoke(IPC.COMBOS_LIST),
-    get: (id: string): Promise<Combo | null> => ipcRenderer.invoke(IPC.COMBOS_GET, { id }),
-    create: (input: CreateCombo): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
-      ipcRenderer.invoke(IPC.COMBOS_CREATE, input),
+  // --- Handoff profiles (agent + task-manager + backend) --------------------
+  handoffProfiles: {
+    list: (): Promise<HandoffProfile[]> => ipcRenderer.invoke(IPC.HANDOFF_PROFILES_LIST),
+    get: (id: string): Promise<HandoffProfile | null> => ipcRenderer.invoke(IPC.HANDOFF_PROFILES_GET, { id }),
+    create: (input: CreateHandoffProfile): Promise<{ ok: boolean; handoffProfile?: HandoffProfile; error?: string }> =>
+      ipcRenderer.invoke(IPC.HANDOFF_PROFILES_CREATE, input),
     update: (
       id: string,
-      payload: UpdateCombo,
-    ): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
-      ipcRenderer.invoke(IPC.COMBOS_UPDATE, { id, payload }),
+      payload: UpdateHandoffProfile,
+    ): Promise<{ ok: boolean; handoffProfile?: HandoffProfile; error?: string }> =>
+      ipcRenderer.invoke(IPC.HANDOFF_PROFILES_UPDATE, { id, payload }),
     delete: (id: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke(IPC.COMBOS_DELETE, { id }),
+      ipcRenderer.invoke(IPC.HANDOFF_PROFILES_DELETE, { id }),
     setEnabled: (
       id: string,
       enabled: boolean,
-    ): Promise<{ ok: boolean; combo?: Combo; error?: string }> =>
-      ipcRenderer.invoke(IPC.COMBOS_SET_ENABLED, { id, enabled }),
+    ): Promise<{ ok: boolean; handoffProfile?: HandoffProfile; error?: string }> =>
+      ipcRenderer.invoke(IPC.HANDOFF_PROFILES_SET_ENABLED, { id, enabled }),
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.SETTINGS_GET),

@@ -2,7 +2,7 @@
  * IPC handlers for the catalog CRUD channels: `agents:*`, `task-managers:*`,
  * and `mcp-servers:*`.
  *
- * Spec: docs/features/handoff-setup/README.md, docs/features/mcp-sources/README.md.
+ * Spec: docs/features/handoff-profiles/README.md, docs/features/mcp-sources/README.md.
  *
  * Each handler validates its payload with a Zod schema before acting (the
  * standard pattern, see src/main/ipc/rules.ts). These channels are the

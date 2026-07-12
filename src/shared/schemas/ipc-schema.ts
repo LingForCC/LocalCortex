@@ -13,10 +13,10 @@ import { z } from 'zod';
 import { RuleSchema } from './rule-schema.js';
 import { HandoffSchema, CreateHandoffSchema } from './handoff-schema.js';
 import {
-  ComboSchema,
-  CreateComboSchema,
-  UpdateComboSchema,
-} from './combo-schema.js';
+  HandoffProfileSchema,
+  CreateHandoffProfileSchema,
+  UpdateHandoffProfileSchema,
+} from './handoff-profile-schema.js';
 import { APPEARANCES, CODEX_REASONING_EFFORTS } from '../constants.js';
 
 // --- Channel name constants -------------------------------------------------
@@ -76,13 +76,13 @@ export const IPC = {
   MCP_SERVERS_UPSERT: 'mcp-servers:upsert',
   MCP_SERVERS_DELETE: 'mcp-servers:delete',
 
-  // --- Combos (agent + task-manager + backend) -----------------------------
-  COMBOS_LIST: 'combos:list',
-  COMBOS_GET: 'combos:get',
-  COMBOS_CREATE: 'combos:create',
-  COMBOS_UPDATE: 'combos:update',
-  COMBOS_DELETE: 'combos:delete',
-  COMBOS_SET_ENABLED: 'combos:setEnabled',
+  // --- Handoff profiles (agent + task-manager + backend) -------------------
+  HANDOFF_PROFILES_LIST: 'handoff-profiles:list',
+  HANDOFF_PROFILES_GET: 'handoff-profiles:get',
+  HANDOFF_PROFILES_CREATE: 'handoff-profiles:create',
+  HANDOFF_PROFILES_UPDATE: 'handoff-profiles:update',
+  HANDOFF_PROFILES_DELETE: 'handoff-profiles:delete',
+  HANDOFF_PROFILES_SET_ENABLED: 'handoff-profiles:setEnabled',
 
   THEME_APPLY: 'theme:apply',
 } as const;
@@ -187,18 +187,18 @@ export const UpdateSettingsResultSchema = z.object({
 export const IdSchema = z.object({ id: z.string().min(1) });
 export const NameSchema = z.object({ name: z.string().min(1) });
 
-// --- Combos -----------------------------------------------------------------
+// --- Handoff profiles -------------------------------------------------------
 
-export const ComboIdSchema = z.object({ id: z.string().min(1) });
-export const CreateComboMessageSchema = CreateComboSchema;
-export const UpdateComboMessageSchema = z.object({
+export const HandoffProfileIdSchema = z.object({ id: z.string().min(1) });
+export const CreateHandoffProfileMessageSchema = CreateHandoffProfileSchema;
+export const UpdateHandoffProfileMessageSchema = z.object({
   id: z.string().min(1),
-  payload: UpdateComboSchema,
+  payload: UpdateHandoffProfileSchema,
 });
-export const SetComboEnabledMessageSchema = z.object({
+export const SetHandoffProfileEnabledMessageSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean(),
 });
 
-/** Re-export the combo schemas/types for the preload + renderer. */
-export { ComboSchema, CreateComboSchema, UpdateComboSchema };
+/** Re-export the handoff-profile schemas/types for the preload + renderer. */
+export { HandoffProfileSchema, CreateHandoffProfileSchema, UpdateHandoffProfileSchema };

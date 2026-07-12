@@ -1,11 +1,11 @@
 /**
  * Home dashboard — the default tab.
  *
- * Spec: docs/features/handoff-setup/README.md.
+ * Spec: docs/features/handoff-profiles/README.md.
  *
- * Summarizes the configured combos (each agent → task manager → backend) and
- * recent handoffs. Combos themselves are created/edited in the Combos tab; when
- * none exist, this view points the user there.
+ * Summarizes the configured handoff profiles (each agent → task manager →
+ * backend) and recent handoffs. Profiles themselves are created/edited in the
+ * Handoff profiles tab; when none exist, this view points the user there.
  */
 
 import * as React from 'react';
@@ -13,18 +13,18 @@ import { Badge } from '@renderer/components/ui/badge';
 import { Button } from '@renderer/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { useHandoffsStore } from '@renderer/store/handoffs';
-import { useCombosStore } from '@renderer/store/combos';
+import { useHandoffProfilesStore } from '@renderer/store/handoff-profiles';
 import type { AgentEntry, TaskManagerEntry } from '@shared/types';
 
-export function Home({ onGoToCombos }: { onGoToCombos: () => void }): React.ReactElement {
-  const combos = useCombosStore((s) => s.combos);
-  const loadCombos = useCombosStore((s) => s.load);
+export function Home({ onGoToHandoffProfiles }: { onGoToHandoffProfiles: () => void }): React.ReactElement {
+  const handoffProfiles = useHandoffProfilesStore((s) => s.handoffProfiles);
+  const loadHandoffProfiles = useHandoffProfilesStore((s) => s.load);
   const handoffs = useHandoffsStore((s) => s.handoffs);
   const loadHandoffs = useHandoffsStore((s) => s.load);
 
   React.useEffect(() => {
-    void Promise.all([loadCombos(), loadHandoffs()]);
-  }, [loadCombos, loadHandoffs]);
+    void Promise.all([loadHandoffProfiles(), loadHandoffs()]);
+  }, [loadHandoffProfiles, loadHandoffs]);
 
   const recentHandoffs = handoffs.slice(0, 5);
 
@@ -33,19 +33,28 @@ export function Home({ onGoToCombos }: { onGoToCombos: () => void }): React.Reac
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Combos</CardTitle>
-            <Button variant="outline" size="sm" onClick={onGoToCombos}>
-              Manage combos
+            <CardTitle>Handoff profiles</CardTitle>
+            <Button variant="outline" size="sm" onClick={onGoToHandoffProfiles}>
+              Manage handoff profiles
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {combos.length === 0 ? (
+          {handoffProfiles.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No combos configured. Visit the Combos tab to set one up.
+              No handoff profiles configured. Visit the Handoff profiles tab to set one up.
             </p>
           ) : (
-            combos.map((c) => <ComboSummaryRow key={c.id} comboId={c.id} label={c.label} agentId={c.agentId} taskManagerId={c.taskManagerId} backend={c.backend} enabled={c.enabled} />)
+            handoffProfiles.map((p) => (
+              <HandoffProfileSummaryRow
+                key={p.id}
+                label={p.label}
+                agentId={p.agentId}
+                taskManagerId={p.taskManagerId}
+                backend={p.backend}
+                enabled={p.enabled}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -60,8 +69,8 @@ export function Home({ onGoToCombos }: { onGoToCombos: () => void }): React.Reac
             parent task (e.g. <code className="text-xs">parentTaskId</code>).
           </p>
           <p>
-            2. When the session completes, each matching combo’s rule fires automatically and
-            creates a review subtask in its task manager.
+            2. When the session completes, each matching handoff profile’s rule fires automatically
+            and creates a review subtask in its task manager.
           </p>
           <p>3. Review the agent’s work at your leisure — the subtask reminds you.</p>
         </CardContent>
@@ -95,8 +104,7 @@ export function Home({ onGoToCombos }: { onGoToCombos: () => void }): React.Reac
   );
 }
 
-function ComboSummaryRow(props: {
-  comboId: string;
+function HandoffProfileSummaryRow(props: {
   label: string;
   agentId: string;
   taskManagerId: string;

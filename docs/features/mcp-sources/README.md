@@ -157,5 +157,5 @@ Serialized for Claude → `options.mcpServers` (in-memory dict). Serialized for 
 
 ## Related
 - [Rules](../rules/README.md) — the `mcpServers` field.
-- [Handoff setup](../handoff-setup/README.md) — the first-run wizard that uses the catalog.
+- [Handoff profiles](../handoff-profiles/README.md) — the profiles that use the catalog.
 - [Agent backends](../agent-backends/README.md) — how servers are attached per backend.

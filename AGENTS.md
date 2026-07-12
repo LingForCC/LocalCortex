@@ -41,7 +41,7 @@ Three Electron layers under `src/`:
   it here once.
 - **`src/main/`** — privileged Electron main process: Node, filesystem, DB,
   CLIs, MCP, scheduler, HTTP ingress. Further divided into `db/`, `mcp/`,
-  `agent/`, `scheduler/`, `events/`, `ipc/`, `observability/`, `handoff-setup/`.
+  `agent/`, `scheduler/`, `events/`, `ipc/`, `observability/`, `handoff-profiles/`.
 - **`src/renderer/`** — sandboxed React 19 + Tailwind 4 + Zustand UI. Touches
   the main process **only** through `window.api` (the preload bridge). No
   `require`, no filesystem, no CLIs.
@@ -121,7 +121,7 @@ Boundary rules that matter:
   and the "factor logic out of Electron" testing rule (§5).
 - [`docs/features/`](./docs/features/) — per-feature specs (rules, triggers,
   stop-conditions, agent-backends, mcp-sources, observability, settings,
-  handoff-setup).
+  handoff-profiles).
 
 Source files cite the relevant doc section in their header comment — follow
 those references when extending.

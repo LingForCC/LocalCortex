@@ -1,9 +1,9 @@
 /**
- * Catalog picker primitives — reusable card-picker + add-custom forms for agents
- * and task managers. Shared between the Combos tab (one picker per combo being
- * edited) and anywhere else a catalog entry needs selecting.
+ * Catalog picker primitives — reusable card-picker + add-custom forms for
+ * agents and task managers. Shared between the Handoff profiles tab (one picker
+ * per profile being edited) and anywhere else a catalog entry needs selecting.
  *
- * Extracted from the former onboarding wizard so the multi-combo editor can
+ * Extracted from the former onboarding wizard so the multi-profile editor can
  * reuse the same "selectable card list + Add custom…" UX.
  */
 

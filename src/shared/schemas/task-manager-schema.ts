@@ -6,7 +6,7 @@
  * name. It carries no spawn config itself — the referenced `mcp_servers` row is
  * the source of truth for command/args/env.
  *
- * Spec: docs/features/handoff-setup/README.md.
+ * Spec: docs/features/handoff-profiles/README.md.
  */
 
 import { z } from 'zod';

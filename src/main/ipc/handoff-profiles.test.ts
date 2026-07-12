@@ -14,18 +14,18 @@ vi.mock('electron', () => ({
 import { openMemoryDatabase } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
 import { RulesRepository } from '../db/repositories/rules.js';
-import { CombosRepository } from '../db/repositories/combos.js';
+import { HandoffProfilesRepository } from '../db/repositories/handoff-profiles.js';
 import { AgentsRepository } from '../db/repositories/agents.js';
 import { TaskManagersRepository } from '../db/repositories/task-managers.js';
 import { McpServersRepository } from '../db/repositories/mcp-servers.js';
-import { registerCombosIpc } from './combos.js';
+import { registerHandoffProfilesIpc } from './handoff-profiles.js';
 import { IPC } from '@shared/schemas/ipc-schema';
-import type { Combo } from '@shared/types';
+import type { HandoffProfile } from '@shared/types';
 import type { DatabaseSync } from 'node:sqlite';
 
 let db: DatabaseSync;
 let rulesRepo: RulesRepository;
-let combosRepo: CombosRepository;
+let handoffProfilesRepo: HandoffProfilesRepository;
 let agentsRepo: AgentsRepository;
 let taskManagersRepo: TaskManagersRepository;
 let mcpServersRepo: McpServersRepository;
@@ -42,13 +42,13 @@ beforeEach(() => {
   db = openMemoryDatabase();
   runMigrations(db);
   rulesRepo = new RulesRepository(db);
-  combosRepo = new CombosRepository(db);
+  handoffProfilesRepo = new HandoffProfilesRepository(db);
   agentsRepo = new AgentsRepository(db);
   taskManagersRepo = new TaskManagersRepository(db);
   mcpServersRepo = new McpServersRepository(db);
   onRulesChangedCalled = false;
-  registerCombosIpc({
-    combosRepo,
+  registerHandoffProfilesIpc({
+    handoffProfilesRepo,
     agentsRepo,
     taskManagersRepo,
     rulesRepo,
@@ -59,23 +59,23 @@ beforeEach(() => {
   });
 });
 
-describe('combos:create', () => {
-  it('creates a rule + combo on valid input and broadcasts onRulesChanged', async () => {
-    const result = (await invoke(IPC.COMBOS_CREATE, {
+describe('handoff-profiles:create', () => {
+  it('creates a rule + profile on valid input and broadcasts onRulesChanged', async () => {
+    const result = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'ZCode → OmniFocus',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
     expect(result.ok).toBe(true);
-    expect(result.combo.agentId).toBe('zcode');
-    expect(result.combo.taskManagerId).toBe('omnifocus');
-    expect(result.combo.backend).toBe('claude');
-    expect(result.combo.enabled).toBe(true);
+    expect(result.handoffProfile.agentId).toBe('zcode');
+    expect(result.handoffProfile.taskManagerId).toBe('omnifocus');
+    expect(result.handoffProfile.backend).toBe('claude');
+    expect(result.handoffProfile.enabled).toBe(true);
     expect(onRulesChangedCalled).toBe(true);
 
     // The owned rule exists with the right event type / servers / backend.
-    const rule = rulesRepo.get(result.combo.ruleId);
+    const rule = rulesRepo.get(result.handoffProfile.ruleId);
     expect(rule).not.toBeNull();
     expect((rule?.trigger as { eventType: string }).eventType).toBe('zcode.session-complete');
     expect(rule?.mcpServers).toEqual(['omnifocus']);
@@ -84,7 +84,7 @@ describe('combos:create', () => {
   });
 
   it('returns ok=false for an unknown agent', async () => {
-    const result = (await invoke(IPC.COMBOS_CREATE, {
+    const result = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'x',
       agentId: 'ghost',
       taskManagerId: 'omnifocus',
@@ -95,7 +95,7 @@ describe('combos:create', () => {
   });
 
   it('returns ok=false for an unknown task manager', async () => {
-    const result = (await invoke(IPC.COMBOS_CREATE, {
+    const result = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'x',
       agentId: 'zcode',
       taskManagerId: 'ghost',
@@ -124,7 +124,7 @@ describe('combos:create', () => {
     db.exec(`PRAGMA foreign_keys = OFF`);
     db.prepare(`DELETE FROM mcp_servers WHERE name = 'temp-server'`).run();
     db.exec(`PRAGMA foreign_keys = ON`);
-    const result = (await invoke(IPC.COMBOS_CREATE, {
+    const result = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'x',
       agentId: 'zcode',
       taskManagerId: 'temp-tm',
@@ -134,62 +134,62 @@ describe('combos:create', () => {
     expect(result.error).toContain('missing MCP server');
   });
 
-  it('supports creating multiple combos (multi-combo model)', async () => {
-    const r1 = (await invoke(IPC.COMBOS_CREATE, {
+  it('supports creating multiple profiles (multi-profile model)', async () => {
+    const r1 = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'ZCode',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
-    const r2 = (await invoke(IPC.COMBOS_CREATE, {
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
+    const r2 = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'Codex',
       agentId: 'codex',
       taskManagerId: 'omnifocus',
       backend: 'codex',
-    })) as { ok: boolean; combo: Combo };
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
     expect(r1.ok && r2.ok).toBe(true);
-    expect(r1.combo.id).not.toBe(r2.combo.id);
-    expect(r1.combo.ruleId).not.toBe(r2.combo.ruleId);
+    expect(r1.handoffProfile.id).not.toBe(r2.handoffProfile.id);
+    expect(r1.handoffProfile.ruleId).not.toBe(r2.handoffProfile.ruleId);
     // Two distinct rules with two distinct event types.
-    expect((rulesRepo.get(r1.combo.ruleId)?.trigger as { eventType: string }).eventType).toBe(
+    expect((rulesRepo.get(r1.handoffProfile.ruleId)?.trigger as { eventType: string }).eventType).toBe(
       'zcode.session-complete',
     );
-    expect((rulesRepo.get(r2.combo.ruleId)?.trigger as { eventType: string }).eventType).toBe(
+    expect((rulesRepo.get(r2.handoffProfile.ruleId)?.trigger as { eventType: string }).eventType).toBe(
       'codex.session-complete',
     );
   });
 });
 
-describe('combos:update', () => {
-  it('patches combo-owned fields and preserves user prompt/model edits', async () => {
-    const created = (await invoke(IPC.COMBOS_CREATE, {
+describe('handoff-profiles:update', () => {
+  it('patches profile-owned fields and preserves user prompt/model edits', async () => {
+    const created = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'ZCode → OmniFocus',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
-    const combo = created.combo;
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
+    const handoffProfile = created.handoffProfile;
 
     // Simulate the user editing the rule's prompt + model via the Rules tab.
-    const ruleRow = rulesRepo.get(combo.ruleId)!;
+    const ruleRow = rulesRepo.get(handoffProfile.ruleId)!;
     rulesRepo.update({ ...ruleRow, rule: 'CUSTOM PROMPT', model: 'gpt-5' });
 
-    // Now update the combo to switch agent + backend.
-    const result = (await invoke(IPC.COMBOS_UPDATE, {
-      id: combo.id,
+    // Now update the profile to switch agent + backend.
+    const result = (await invoke(IPC.HANDOFF_PROFILES_UPDATE, {
+      id: handoffProfile.id,
       payload: {
         label: 'Codex → OmniFocus',
         agentId: 'codex',
         taskManagerId: 'omnifocus',
         backend: 'codex',
       },
-    })) as { ok: boolean; combo: Combo };
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
     expect(result.ok).toBe(true);
-    expect(result.combo.agentId).toBe('codex');
-    expect(result.combo.backend).toBe('codex');
-    expect(result.combo.label).toBe('Codex → OmniFocus');
+    expect(result.handoffProfile.agentId).toBe('codex');
+    expect(result.handoffProfile.backend).toBe('codex');
+    expect(result.handoffProfile.label).toBe('Codex → OmniFocus');
 
-    const rule = rulesRepo.get(combo.ruleId)!;
+    const rule = rulesRepo.get(handoffProfile.ruleId)!;
     expect((rule.trigger as { eventType: string }).eventType).toBe('codex.session-complete');
     expect(rule.backend).toBe('codex');
     expect(rule.name).toBe('Codex → OmniFocus');
@@ -198,8 +198,8 @@ describe('combos:update', () => {
     expect(rule.model).toBe('gpt-5');
   });
 
-  it('returns ok=false for a missing combo', async () => {
-    const result = (await invoke(IPC.COMBOS_UPDATE, {
+  it('returns ok=false for a missing profile', async () => {
+    const result = (await invoke(IPC.HANDOFF_PROFILES_UPDATE, {
       id: 'nonexistent',
       payload: { label: 'x', agentId: 'zcode', taskManagerId: 'omnifocus', backend: 'claude' },
     })) as { ok: boolean; error: string };
@@ -208,57 +208,57 @@ describe('combos:update', () => {
   });
 });
 
-describe('combos:setEnabled', () => {
+describe('handoff-profiles:setEnabled', () => {
   it('mirrors the flag onto the owned rule', async () => {
-    const created = (await invoke(IPC.COMBOS_CREATE, {
+    const created = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'Z',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
-    const combo = created.combo;
-    expect(rulesRepo.get(combo.ruleId)?.enabled).toBe(true);
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
+    const handoffProfile = created.handoffProfile;
+    expect(rulesRepo.get(handoffProfile.ruleId)?.enabled).toBe(true);
 
-    const result = (await invoke(IPC.COMBOS_SET_ENABLED, {
-      id: combo.id,
+    const result = (await invoke(IPC.HANDOFF_PROFILES_SET_ENABLED, {
+      id: handoffProfile.id,
       enabled: false,
-    })) as { ok: boolean; combo: Combo };
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
     expect(result.ok).toBe(true);
-    expect(result.combo.enabled).toBe(false);
+    expect(result.handoffProfile.enabled).toBe(false);
     // Rule mirrored.
-    expect(rulesRepo.get(combo.ruleId)?.enabled).toBe(false);
+    expect(rulesRepo.get(handoffProfile.ruleId)?.enabled).toBe(false);
   });
 });
 
-describe('combos:delete', () => {
-  it('deletes both the combo and its owned rule', async () => {
-    const created = (await invoke(IPC.COMBOS_CREATE, {
+describe('handoff-profiles:delete', () => {
+  it('deletes both the profile and its owned rule', async () => {
+    const created = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'Z',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
-    const combo = created.combo;
-    const ruleId = combo.ruleId;
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
+    const handoffProfile = created.handoffProfile;
+    const ruleId = handoffProfile.ruleId;
 
-    const result = (await invoke(IPC.COMBOS_DELETE, { id: combo.id })) as { ok: boolean };
+    const result = (await invoke(IPC.HANDOFF_PROFILES_DELETE, { id: handoffProfile.id })) as { ok: boolean };
     expect(result.ok).toBe(true);
-    expect(combosRepo.get(combo.id)).toBeNull();
+    expect(handoffProfilesRepo.get(handoffProfile.id)).toBeNull();
     expect(rulesRepo.get(ruleId)).toBeNull();
   });
 });
 
-describe('combos:list / combos:get', () => {
-  it('lists and gets combos', async () => {
-    const created = (await invoke(IPC.COMBOS_CREATE, {
+describe('handoff-profiles:list / handoff-profiles:get', () => {
+  it('lists and gets handoff profiles', async () => {
+    const created = (await invoke(IPC.HANDOFF_PROFILES_CREATE, {
       label: 'Z',
       agentId: 'zcode',
       taskManagerId: 'omnifocus',
       backend: 'claude',
-    })) as { ok: boolean; combo: Combo };
-    const list = (await invoke(IPC.COMBOS_LIST)) as Combo[];
+    })) as { ok: boolean; handoffProfile: HandoffProfile };
+    const list = (await invoke(IPC.HANDOFF_PROFILES_LIST)) as HandoffProfile[];
     expect(list).toHaveLength(1);
-    const got = (await invoke(IPC.COMBOS_GET, { id: created.combo.id })) as Combo | null;
-    expect(got?.id).toBe(created.combo.id);
+    const got = (await invoke(IPC.HANDOFF_PROFILES_GET, { id: created.handoffProfile.id })) as HandoffProfile | null;
+    expect(got?.id).toBe(created.handoffProfile.id);
   });
 });

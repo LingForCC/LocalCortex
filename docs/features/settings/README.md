@@ -18,7 +18,7 @@ Global defaults that apply across all rules. The **Settings** tab exposes the de
 | **Claude Code CLI path** | none (auto-detect) | Explicit path to a locally installed `claude` binary. Same resolution semantics as the Codex field. |
 | **Codex model (default)** | `gpt-5.5` | Model id used when a Codex rule doesn't set its own `model`. Free-text (e.g. `gpt-5.6-sol`). |
 | **Codex reasoning effort (default)** | `medium` | Applied to Codex rules that don't set their own effort (`minimal` / `low` / `medium` / `high` / `xhigh`). |
-| **Handoff setup** | unset (onboarding required) | The three onboarding choices (`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`) plus the auto-created rule id (`handoffRuleId`). Managed by the [handoff setup](../handoff-setup/README.md) wizard; shown read-only in the Settings view with a reset button. |
+| **Handoff setup** | unset (onboarding required) | The three onboarding choices (`handoffAgentId`, `handoffTaskManagerId`, `handoffBackend`) plus the auto-created rule id (`handoffRuleId`). Managed by the [handoff profiles](../handoff-profiles/README.md) feature; shown read-only in the Settings view with a reset button. |
 
 Settings persist in the `app_settings` table and survive restarts.
 
@@ -93,7 +93,7 @@ model              = rule.model              ?? settings.codexModel             
 reasoningEffort    = rule.modelReasoningEffort ?? settings.codexReasoningEffort  (default: medium)
 ```
 
-This mirrors the tick-interval fallback: a rule that leaves the field blank always uses whatever the current app default is. So changing the app default immediately affects every rule that doesn't override it — including the [auto-created handoff rule](../handoff-setup/README.md), which leaves both fields blank and inherits by design.
+This mirrors the tick-interval fallback: a rule that leaves the field blank always uses whatever the current app default is. So changing the app default immediately affects every rule that doesn't override it — including the [auto-created handoff rule](../handoff-profiles/README.md), which leaves both fields blank and inherits by design.
 
 Notes:
 - **Codex-only.** The Claude backend ignores both fields.

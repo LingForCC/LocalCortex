@@ -1,7 +1,7 @@
 /**
- * Pure logic that builds the auto-created rule owned by a handoff combo.
+ * Pure logic that builds the auto-created rule owned by a handoff profile.
  *
- * Spec: docs/features/handoff-setup/README.md.
+ * Spec: docs/features/handoff-profiles/README.md.
  *
  * This module is Electron-free and side-effect-free, so it's unit-testable in
  * plain Vitest (the "factor logic out of Electron" rule, docs/tech-stack.md §5).
@@ -13,8 +13,8 @@
  *   - taskManager  → the sink (which MCP server the rule uses)
  *   - backend      → which runner fulfills the rule (Claude/Codex SDK)
  *
- * One combo owns exactly one rule. Multiple combos can run in parallel — one
- * per agent source — because each rule listens to its agent's distinct
+ * One profile owns exactly one rule. Multiple profiles can run in parallel —
+ * one per agent source — because each rule listens to its agent's distinct
  * session-complete event type and the matcher fires every matching rule.
  */
 
@@ -23,13 +23,13 @@ import type { AgentEntry, TaskManagerEntry } from '@shared/types';
 
 /**
  * Stable id for the legacy singleton handoff rule. Kept only so the migration
- * (006_handoff_combos.sql) can copy a pre-existing setup into one combo row
- * reusing the same rule. New combos mint per-combo rule ids (UUIDs) via the
+ * (006_handoff_profiles.sql) can copy a pre-existing setup into one profile row
+ * reusing the same rule. New profiles mint per-profile rule ids (UUIDs) via the
  * IPC layer.
  */
 export const HANDOFF_RULE_ID = 'handoff-auto';
 
-/** Recognizable default name for a combo's auto-created rule. */
+/** Recognizable default name for a profile's auto-created rule. */
 export const HANDOFF_RULE_NAME = 'Handoff (auto-created)';
 
 /**
@@ -54,9 +54,9 @@ reason: <one line>
 </status>`;
 
 /**
- * Build a new handoff Rule owned by a combo. The caller supplies the rule id
- * (a fresh UUID per combo), so each combo owns its own row independent of any
- * other combo.
+ * Build a new handoff Rule owned by a profile. The caller supplies the rule id
+ * (a fresh UUID per profile), so each profile owns its own row independent of
+ * any other profile.
  *
  * The rule:
  *   - listens to the agent's session-complete event type
@@ -65,7 +65,7 @@ reason: <one line>
  *   - is read-only (MCP tool calls aren't filesystem writes)
  *   - has the default review-subtask prompt
  */
-export function buildHandoffRule(
+export function buildHandoffProfileRule(
   agent: AgentEntry,
   taskManager: TaskManagerEntry,
   backend: AgentBackend,
@@ -84,16 +84,17 @@ export function buildHandoffRule(
     backend,
     sandbox: 'read-only',
     notes:
-      `Auto-created by combo setup. Agent: ${agent.label}. ` +
+      `Auto-created by handoff profile. Agent: ${agent.label}. ` +
       `Task manager: ${taskManager.label}. ` +
-      `Edit freely — the combo keeps this rule's trigger/server/backend in sync and preserves your prompt/model edits.`,
+      `Edit freely — the profile keeps this rule's trigger/server/backend in sync and preserves your prompt/model edits.`,
   };
 }
 
 /**
- * Apply the combo-owned fields onto an existing rule, preserving everything the
- * user may have edited. Used when a combo is updated (agent / task manager /
- * backend / label changed): only the fields the combo owns are overwritten.
+ * Apply the profile-owned fields onto an existing rule, preserving everything
+ * the user may have edited. Used when a profile is updated (agent / task
+ * manager / backend / label changed): only the fields the profile owns are
+ * overwritten.
  *
  * Preserved user-editable fields:
  *   - `rule`        (prompt text)
@@ -101,9 +102,9 @@ export function buildHandoffRule(
  *   - `workdir`, `sandbox`, `maxRuns`, `expiresAt`, `notes`
  *
  * Also preserves bookkeeping that lives on the rule row but is managed by other
- * flows: `enabled` (mirrored from the combo via setEnabled) and `id`.
+ * flows: `enabled` (mirrored from the profile via setEnabled) and `id`.
  */
-export function applyComboFieldsToRule(
+export function applyProfileFieldsToRule(
   rule: Rule,
   agent: AgentEntry,
   taskManager: TaskManagerEntry,

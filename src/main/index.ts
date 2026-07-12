@@ -18,7 +18,7 @@ import { runMigrations } from './db/migrate.js';
 import { RulesRepository } from './db/repositories/rules.js';
 import { RunsRepository } from './db/repositories/runs.js';
 import { HandoffsRepository } from './db/repositories/handoffs.js';
-import { CombosRepository } from './db/repositories/combos.js';
+import { HandoffProfilesRepository } from './db/repositories/handoff-profiles.js';
 import { SettingsRepository } from './db/repositories/settings.js';
 import { McpServersRepository } from './db/repositories/mcp-servers.js';
 import { AgentsRepository } from './db/repositories/agents.js';
@@ -39,7 +39,7 @@ import { registerHandoffsIpc } from './ipc/handoffs.js';
 import { registerServersIpc } from './ipc/servers.js';
 import { registerSettingsIpc } from './ipc/settings.js';
 import { registerCatalogIpc } from './ipc/catalog.js';
-import { registerCombosIpc } from './ipc/combos.js';
+import { registerHandoffProfilesIpc } from './ipc/handoff-profiles.js';
 import { IPC } from '@shared/schemas/ipc-schema';
 import { LifecycleManager } from './mcp/lifecycle.js';
 import { logger, logError } from './observability/logger.js';
@@ -134,7 +134,7 @@ async function bootstrap(): Promise<void> {
   const rulesRepo = new RulesRepository(db);
   const runsRepo = new RunsRepository(db);
   const handoffsRepo = new HandoffsRepository(db);
-  const combosRepo = new CombosRepository(db);
+  const handoffProfilesRepo = new HandoffProfilesRepository(db);
   const settingsRepo = new SettingsRepository(db);
   const mcpServersRepo = new McpServersRepository(db);
   const agentsRepo = new AgentsRepository(db);
@@ -275,8 +275,8 @@ async function bootstrap(): Promise<void> {
   );
   registerServersIpc({ mcpServersRepo, getRules: () => rulesRepo.list() });
   registerCatalogIpc({ agentsRepo, taskManagersRepo, mcpServersRepo });
-  registerCombosIpc({
-    combosRepo,
+  registerHandoffProfilesIpc({
+    handoffProfilesRepo,
     agentsRepo,
     taskManagersRepo,
     rulesRepo,

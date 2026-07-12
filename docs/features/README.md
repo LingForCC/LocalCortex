@@ -17,7 +17,7 @@ Each feature lives in its own subfolder with two files:
 
 | Feature | What it gives you |
 | --- | --- |
-| [**Handoff setup**](./handoff-setup/README.md) | The first-run wizard that specializes the app around the handoff use case. Pick your coding agent, task manager, and review-rule backend — the handoff rule is auto-created. |
+| [**Handoff profiles**](./handoff-profiles/README.md) | Configure how the app specializes around the handoff use case. Pick your coding agent, task manager, and review-rule backend — the handoff rule is auto-created. Multiple profiles run in parallel (one per agent source). |
 | [**Rules**](./rules/README.md) | Define natural-language rules that an agent executes — the heart of the app. Create, edit, enable/disable, delete, run-now. |
 | [**Triggers**](./triggers/README.md) | Two ways a rule fires: on a schedule (**tick**), or in response to a matching local HTTP event (**event**). Event payloads render into the rule as `{{template}}` variables. |
 | [**Agent backends**](./agent-backends/README.md) | Choose whether **Claude** or **Codex** runs each rule. Both are first-class; the difference is invisible to the rule text. |
@@ -25,7 +25,7 @@ Each feature lives in its own subfolder with two files:
 | [**Observability (run history)**](./observability/README.md) | Every run is recorded — prompt, tool calls, token cost, duration, result, and the parsed status. The safety net under auto-execute. |
 | [**Handoffs**](./handoffs/README.md) | Register a reminder that fires when an agent session completes — e.g. auto-create a review subtask under the OmniFocus/Todoist task the agent worked on. Manager- and source-agnostic. |
 | [**Stop conditions**](./stop-conditions/README.md) | How rules stop themselves: the agent emits a `done`/`error` status, or structural backstops (`maxRuns`, `expiresAt`) catch the rest. |
-| [**Settings**](./settings/README.md) | Global defaults: the tick interval applied when a rule omits its own, the concurrency cap, an optional event-ingress shared secret, explicit paths to the Codex / Claude Code CLIs, and the handoff-setup choices. |
+| [**Settings**](./settings/README.md) | Global defaults: the tick interval applied when a rule omits its own, the concurrency cap, an optional event-ingress shared secret, explicit paths to the Codex / Claude Code CLIs, and the Codex model defaults. |
 
 ---
 

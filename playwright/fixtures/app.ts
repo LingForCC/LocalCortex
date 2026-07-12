@@ -55,17 +55,18 @@ export interface AppFixture {
    */
   relaunch: () => Promise<void>;
   /**
-   * Create a handoff combo via the Combos tab UI (label → pick agent → task
-   * manager → backend → Create) so a combo + its auto-created rule exist. The
-   * app no longer has a first-run wizard — the shell is always reachable — but
-   * most specs still want a combo present (e.g. to exercise the rule it owns).
+   * Create a handoff profile via the Handoff profiles tab UI (label → pick
+   * agent → task manager → backend → Create) so a profile + its auto-created
+   * rule exist. The app no longer has a first-run wizard — the shell is always
+   * reachable — but most specs still want a profile present (e.g. to exercise
+   * the rule it owns).
    *
-   * Idempotent: if a combo already exists, it's a no-op.
+   * Idempotent: if a profile already exists, it's a no-op.
    *
    * @param opts.agent     Agent id to select (default: the first builtin, 'zcode').
    * @param opts.taskManager Task manager id (default: the first builtin, 'omnifocus').
    * @param opts.backend   Review-rule backend (default: 'claude').
-   * @param opts.label     Combo label (default: 'Test combo').
+   * @param opts.label     Profile label (default: 'Test profile').
    */
   completeOnboarding: (opts?: {
     agent?: string;
@@ -138,15 +139,17 @@ export const test = base.extend<{ app: AppFixture }>({
         const agent = opts?.agent ?? 'zcode';
         const taskManager = opts?.taskManager ?? 'omnifocus';
         const backend = opts?.backend ?? 'Claude';
-        const label = opts?.label ?? 'Test combo';
+        const label = opts?.label ?? 'Test profile';
 
         // The app no longer gates on a wizard — the shell is always visible.
-        // Navigate to the Combos tab; if a combo with the same label already
-        // exists, treat it as idempotent and skip. (Checking "any combo exists"
-        // would break specs that legitimately create multiple combos.)
-        // exact: true because the Home tab also has a "Manage combos" button,
-        // which substring-matches name: 'Combos' and trips strict mode.
-        await window.getByRole('button', { name: 'Combos', exact: true }).click();
+        // Navigate to the Handoff profiles tab; if a profile with the same
+        // label already exists, treat it as idempotent and skip. (Checking "any
+        // profile exists" would break specs that legitimately create multiple
+        // profiles.)
+        // exact: true because the Home tab also has a "Manage handoff profiles"
+        // button, which substring-matches name: 'Handoff profiles' and trips
+        // strict mode.
+        await window.getByRole('button', { name: 'Handoff profiles', exact: true }).click();
         const labelExists = await window
           .getByText(label, { exact: true })
           .first()
@@ -154,8 +157,8 @@ export const test = base.extend<{ app: AppFixture }>({
           .catch(() => false);
         if (labelExists) return;
 
-        // Open the new-combo editor.
-        await window.getByRole('button', { name: 'New combo' }).click();
+        // Open the new-profile editor.
+        await window.getByRole('button', { name: 'New handoff profile' }).click();
 
         // Fill the label.
         await window.getByLabel('Label').fill(label);
@@ -174,10 +177,10 @@ export const test = base.extend<{ app: AppFixture }>({
         await window.getByRole('radio', { name: new RegExp(`^${backend} \\(`, 'i') }).click();
 
         // Save.
-        await window.getByRole('button', { name: 'Create combo' }).click();
+        await window.getByRole('button', { name: 'Create handoff profile' }).click();
 
-        // Wait for the combo list to re-render (the Edit button for the new row
-        // appears) and return to Home so the caller starts from a known tab.
+        // Wait for the profile list to re-render (the Edit button for the new
+        // row appears) and return to Home so the caller starts from a known tab.
         await expect(window.getByRole('button', { name: 'Edit' }).first()).toBeVisible({
           timeout: 10_000,
         });
