@@ -12,6 +12,14 @@ function startEvent(type: string, sessionId: string): IncomingEvent {
   return { type, timestamp: '2026-07-09T00:00:00Z', payload: { sessionId } };
 }
 
+/**
+ * An event carrying a `workdir` (as the codex/claude hook bridges POST).
+ * LocalCortex's own fulfillment runs set workdir under the run-staging root.
+ */
+function eventWithWorkdir(type: string, sessionId: string, workdir: string): IncomingEvent {
+  return { type, timestamp: '2026-07-09T00:00:00Z', payload: { sessionId, workdir } };
+}
+
 function eventRule(id: string, eventType: string): Rule {
   return {
     id,
@@ -158,6 +166,123 @@ describe('ingress onEvent observer', () => {
     // onMatched received the original event (enrichment happens inside index.ts
     // wiring, not in the ingress itself; the ingress hands onMatched the event).
     expect(matchedEvents[0]!.payload['sessionId']).toBe('sess_both');
+    await app.close();
+  });
+});
+
+describe('ingress self-event filtering', () => {
+  // Regression guard for the feedback loop: LocalCortex's own Codex/Claude
+  // fulfillment runs fire the hook plugin (installed in the backend), which
+  // POSTs session-complete events back to the ingress. Those carry a workdir
+  // under the run-staging root and would re-trigger the handoff rule → loop.
+  // The ingress drops them before matching/observers when
+  // selfEventWorkdirPrefix is set.
+
+  const SELF_PREFIX = '/home/user/.localcortex/runs/work';
+
+  it('drops an event whose workdir is under the self-event prefix', async () => {
+    const matched: string[] = [];
+    const observed: IncomingEvent[] = [];
+    const app = buildIngress({
+      selfEventWorkdirPrefix: SELF_PREFIX,
+      getRules: () => [eventRule('r1', 'codex.session-complete')],
+      onMatched: async (_e, rules) => {
+        matched.push(...rules.map((r) => r.id));
+      },
+      onEvent: (e) => {
+        observed.push(e);
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      payload: eventWithWorkdir(
+        'codex.session-complete',
+        'sess_self',
+        `${SELF_PREFIX}/handoff-auto`,
+      ),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, matched: 0, selfEvent: true });
+    // Neither the matcher nor the observer fired.
+    expect(matched).toHaveLength(0);
+    expect(observed).toHaveLength(0);
+    await app.close();
+  });
+
+  it('still processes a real session event whose workdir is NOT under the prefix', async () => {
+    const matched: string[] = [];
+    const observed: IncomingEvent[] = [];
+    const app = buildIngress({
+      selfEventWorkdirPrefix: SELF_PREFIX,
+      getRules: () => [eventRule('r1', 'codex.session-complete')],
+      onMatched: async (_e, rules) => {
+        matched.push(...rules.map((r) => r.id));
+      },
+      onEvent: (e) => {
+        observed.push(e);
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      payload: eventWithWorkdir(
+        'codex.session-complete',
+        'sess_real',
+        '/Users/me/projects/myrepo',
+      ),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, matched: 1 });
+    expect(matched).toEqual(['r1']);
+    expect(observed).toHaveLength(1);
+    await app.close();
+  });
+
+  it('does not filter when selfEventWorkdirPrefix is unset (back-compat)', async () => {
+    const matched: string[] = [];
+    const app = buildIngress({
+      // no selfEventWorkdirPrefix
+      getRules: () => [eventRule('r1', 'codex.session-complete')],
+      onMatched: async (_e, rules) => {
+        matched.push(...rules.map((r) => r.id));
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      payload: eventWithWorkdir(
+        'codex.session-complete',
+        'sess_self',
+        `${SELF_PREFIX}/handoff-auto`,
+      ),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, matched: 1 });
+    expect(matched).toEqual(['r1']);
+    await app.close();
+  });
+
+  it('ignores a non-string workdir (does not throw, processes normally)', async () => {
+    const matched: string[] = [];
+    const app = buildIngress({
+      selfEventWorkdirPrefix: SELF_PREFIX,
+      getRules: () => [eventRule('r1', 'codex.session-complete')],
+      onMatched: async (_e, rules) => {
+        matched.push(...rules.map((r) => r.id));
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      payload: {
+        type: 'codex.session-complete',
+        timestamp: '2026-07-09T00:00:00Z',
+        payload: { sessionId: 'sess_x', workdir: 12345 }, // non-string
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(matched).toEqual(['r1']);
     await app.close();
   });
 });

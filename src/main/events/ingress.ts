@@ -45,6 +45,16 @@ export interface IngressOptions {
    * try/catch (the ingress logs but never lets one break the reply).
    */
   onEvent?: (event: IncomingEvent) => Promise<void> | void;
+  /**
+   * Absolute path prefix identifying LocalCortex's OWN agent-run workdirs
+   * (e.g. `~/.localcortex/runs/work`). Events whose `payload.workdir` starts
+   * with this prefix are dropped before matching/observers — they are
+   * self-events fired by the hook plugin installed in the fulfilling backend
+   * (Codex/Claude), and acting on them would form a feedback loop
+   * (run → session-complete → matches a rule → run → …). Optional; when unset,
+   * no self-event filtering is applied (tests that don't care about the loop).
+   */
+  selfEventWorkdirPrefix?: string;
 }
 
 /**
@@ -83,6 +93,21 @@ export function buildIngress(opts: IngressOptions): FastifyInstance {
     logger.info(
       `ingress: event type=${event.type} ts=${event.timestamp} payload=${JSON.stringify(event.payload)}`,
     );
+
+    // Drop self-events: events fired by the hook plugin installed in
+    // LocalCortex's OWN fulfillment backend (Codex/Claude). These carry a
+    // workdir under the run-staging root and would otherwise form a feedback
+    // loop (run → session-complete → matches a rule → run → …). Logged so the
+    // dropped event is still visible, but neither matched nor observed.
+    if (opts.selfEventWorkdirPrefix) {
+      const workdir = event.payload['workdir'];
+      if (typeof workdir === 'string' && workdir.startsWith(opts.selfEventWorkdirPrefix)) {
+        logger.info(
+          `ingress: ignoring self-event (workdir under ${opts.selfEventWorkdirPrefix}) type=${event.type}`,
+        );
+        return reply.code(200).send({ ok: true, matched: 0, selfEvent: true });
+      }
+    }
 
     // Side-effect-only hook (e.g. the prompt-submit popup) fires for every
     // accepted event regardless of rule matches. Isolate it so a throwing

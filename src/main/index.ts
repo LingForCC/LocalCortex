@@ -210,6 +210,12 @@ async function bootstrap(): Promise<void> {
   // 6. Event ingress (event rules).
   ingressServer = await startIngress({
     port: 4729,
+    // Events fired by the hook plugin in LocalCortex's OWN fulfillment runs
+    // (Codex/Claude) carry a workdir under the run-staging root. Dropping them
+    // here prevents the feedback loop: run → session-complete → matches a
+    // handoff rule → run → … Must match resolveCwd()'s layout
+    // (join(scratchRoot, 'work', rule.id)).
+    selfEventWorkdirPrefix: join(appDataRoot, RUNS_SUBDIR, 'work'),
     getRules: () => rulesRepo.list().filter((r) => r.enabled),
     // Side-effect-only observer: opens the handoff-attach popup for prompt-
     // submit events (regardless of whether any rule matches them). Isolated in
