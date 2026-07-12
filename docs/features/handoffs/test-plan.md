@@ -29,7 +29,7 @@ Covers **schema validation**, **repository persistence**, **the enrichment seam*
 | --- | --- | --- |
 | Unit (pure logic) | Vitest | `src/**/*.test.ts` |
 | Integration (composition) | Vitest (fake repo) | `src/**/*.test.ts` |
-| E2E (Electron) | Playwright | `playwright/*.spec.ts` (planned) |
+| E2E (Electron) | Playwright | `playwright/*.spec.ts` |
 | Manual | operator | — |
 
 ---
@@ -183,7 +183,7 @@ window. Mocks `electron`'s `ipcMain` via `vi.mock` to capture handlers.
 
 ## E2E (Playwright) — Handoffs panel + prompt-submit popup
 
-**Status:** planned — `playwright/handoffs.spec.ts` + `playwright/handoff-prompt.spec.ts` (on the shared isolation fixture).
+**Status:** ✅ covered — `playwright/handoffs.spec.ts` (H-E2E1–H-E2E5) + `playwright/handoff-prompt.spec.ts` (H-E2E6–H-E2E9) on the shared isolation fixture.
 
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
