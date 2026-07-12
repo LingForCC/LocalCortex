@@ -110,8 +110,9 @@ Boundary rules that matter:
 
 - [`docs/architecture.md`](./docs/architecture.md) — authoritative architecture
   reference (module map §4, lifecycle §5–7, constraints §8, out-of-scope §9).
-- [`docs/rule-config-schema.md`](./docs/rule-config-schema.md) — rule config
-  format + validation rules enforced before save (§11).
+- [`docs/features/rules/README.md`](./docs/features/rules/README.md) — rule
+  config format (fields, TypeScript types, validation rules enforced before
+  save).
 - [`docs/features/mcp-sources/README.md`](./docs/features/mcp-sources/README.md) —
   MCP server config format, Sources-tab CRUD, resolution, and placeholder rules
   (DB-backed, not file-based). The older [`docs/mcp-servers.md`](./docs/mcp-servers.md)

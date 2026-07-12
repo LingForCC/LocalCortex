@@ -24,7 +24,7 @@ The app parses this from the transcript and acts:
 
 > **Event-triggered rules are never disabled by run outcome.** An event rule runs as long as it is enabled — the `done`/`error` status does **not** disable it, because each matching event is a discrete reaction and the rule should keep reacting to future events. The status is still parsed and recorded on each run for observability; only a manual toggle, an explicit `maxRuns`, or an explicit `expiresAt` can auto-disable an event rule.
 
-The status contract is **app-authored** — appended to every prompt automatically. You never write it in the rule text. See [design: prompt contract](../../rule-config-schema.md#2-rule--natural-language-instruction).
+The status contract is **app-authored** — appended to every prompt automatically. You never write it in the rule text. See [Rules → prompt contract](../rules/README.md#prompt-contract-app-assembled).
 
 ### Parsing is lenient
 The parser scans the **whole** transcript for the first valid block (not just the last line), tolerating extra whitespace and fields, skipping malformed JSON and non-status JSON objects. If no block is found, the rule stays `active` and relies on the backstops below. See [Observability](../observability/README.md) for how the parsed status is recorded.

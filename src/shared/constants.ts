@@ -1,9 +1,9 @@
 /**
  * App-wide constants. Sourced from docs/architecture.md, docs/tech-stack.md,
- * docs/mcp-servers.md, and docs/rule-config-schema.md.
+ * docs/mcp-servers.md, and docs/features/rules/README.md.
  */
 
-/** Minimum allowed tick interval for a tick-triggered rule (rule-config-schema §11.2). */
+/** Minimum allowed tick interval for a tick-triggered rule (rules README → "Validation rules"). */
 export const MIN_TICK_INTERVAL_SECONDS = 300;
 
 /** Default tick interval when a rule omits `trigger.intervalSeconds` (arch §6.5: 60 min). */
@@ -33,7 +33,7 @@ export const DEFAULT_CODEX_MODEL = 'gpt-5.5';
 /** Default Codex reasoning effort (app-level default; overridable per rule). */
 export const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
 
-/** Default `maxRuns` backstop when a rule omits it (rule-config-schema §7: ≈2 days @ 60min). */
+/** Default `maxRuns` backstop when a rule omits it (stop-conditions/README.md: ≈2 days @ 60min). */
 export const DEFAULT_MAX_RUNS = 48;
 
 /** Port for the local HTTP event ingress (arch §6.7 example uses 4729). */
@@ -45,7 +45,7 @@ export const INGRESS_HOST = '127.0.0.1';
 /**
  * Placeholder token the bundled default mcp-servers.json ships with.
  * The lifecycle manager rejects a server whose env still contains this
- * value (mcp-servers.md §5.3, rule-config-schema §11.4).
+ * value (mcp-sources/README.md, rules README → "Validation rules").
  */
 export const PLACEHOLDER_TOKEN = '<your-token-here>';
 

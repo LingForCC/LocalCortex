@@ -1,7 +1,7 @@
 /**
  * Routes an incoming event to the rules that should fire on it.
  *
- * Spec: docs/rule-config-schema.md §3.2, docs/architecture.md §6.7.
+ * Spec: docs/features/triggers/README.md (event trigger), docs/architecture.md §6.7.
  *
  * A rule matches an event when:
  *  - the rule's trigger is an EVENT trigger;

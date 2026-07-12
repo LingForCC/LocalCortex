@@ -1,7 +1,7 @@
 /**
  * Local HTTP event ingress for event-triggered rules.
  *
- * Spec: docs/architecture.md §6.7, §8; docs/rule-config-schema.md §3.2.
+ * Spec: docs/architecture.md §6.7, §8; docs/features/triggers/README.md (event trigger).
  *
  * A loopback-only Fastify listener on 127.0.0.1:PORT/event receives POSTed JSON
  * events from external sources (Codex hooks, Claude Code hooks, shell scripts,

@@ -9,7 +9,7 @@ Each feature lives in its own subfolder with two files:
 | `README.md` | How the feature works from the operator's perspective: what it does, how to use it, gotchas, and worked examples. |
 | `test-plan.md` | The test plan for the feature: in-scope behaviors, test types (unit / integration / E2E / manual), and pass/fail criteria. |
 
-> These docs describe **features as implemented**. For the architectural rationale behind each design decision, see the [design docs](../) (`architecture.md`, `rule-config-schema.md`, `tech-stack.md`).
+> These docs describe **features as implemented**. For the architectural rationale behind each design decision, see the [design docs](../) (`architecture.md`, `mcp-servers.md`, `tech-stack.md`).
 
 ---
 

@@ -2,7 +2,7 @@
  * Zod schema for a Rule — the contract between the renderer (rule editor) and
  * the main process (scheduler, event ingress, AgentRunner).
  *
- * Spec: docs/rule-config-schema.md (full schema + §11 validation rules).
+ * Spec: docs/features/rules/README.md (full schema + "Validation rules").
  * Stored as JSON in the `rules` table; `trigger`/`mcpServers` serialized as
  * JSON columns (docs/tech-stack.md §4).
  */
@@ -10,7 +10,7 @@
 import { z } from 'zod';
 import { MIN_TICK_INTERVAL_SECONDS, CODEX_REASONING_EFFORTS } from '../constants.js';
 
-// --- Trigger (rule-config-schema.md §3) ------------------------------------
+// --- Trigger (rules README → "Anatomy of a rule") --------------------------
 
 export const TickTriggerSchema = z.object({
   type: z.literal('tick'),
@@ -28,7 +28,7 @@ export const EventTriggerSchema = z.object({
 
 export const TriggerSchema = z.discriminatedUnion('type', [TickTriggerSchema, EventTriggerSchema]);
 
-// --- Rule (rule-config-schema.md §1, §10) ----------------------------------
+// --- Rule (rules README → "Anatomy of a rule" + "TypeScript types") --------
 
 export const RuleSchema = z.object({
   /** Stable, unique id (used in run workdir paths and FKs). */

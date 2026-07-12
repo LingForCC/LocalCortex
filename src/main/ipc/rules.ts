@@ -1,7 +1,7 @@
 /**
  * IPC handlers for the `rules:*` channels.
  *
- * Spec: docs/architecture.md §4 (ipc/rules.ts), rule-config-schema.md §11
+ * Spec: docs/architecture.md §4 (ipc/rules.ts), docs/features/rules/README.md
  * (validation rules enforced before save).
  *
  * Each handler validates its incoming payload with a Zod schema, then calls the
@@ -47,7 +47,7 @@ export function registerRulesIpc(rulesRepo: RulesRepository): void {
 
   ipcMain.handle(IPC.RULE_SET_ENABLED, async (_evt, raw) => {
     const { id, enabled } = SetRuleEnabledMessageSchema.parse(raw);
-    // Re-enabling resets the run counter (rule-config-schema.md §7 "Re-enabling").
+    // Re-enabling resets the run counter (stop-conditions/README.md "Re-enabling").
     if (enabled) rulesRepo.resetRunCount(id);
     return rulesRepo.setEnabled(id, enabled);
   });

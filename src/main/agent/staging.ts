@@ -28,7 +28,7 @@ export interface StagedRun {
 /**
  * Resolve the rule's effective cwd (the directory the agent runs IN).
  * Falls back to a per-rule scratch dir when `rule.workdir` is unset
- * (rule-config-schema.md §6).
+ * (rules README → "Workdir").
  */
 export function resolveCwd(rule: Pick<Rule, 'workdir' | 'id'>, scratchRoot: string): string {
   if (rule.workdir && rule.workdir.trim().length > 0) return rule.workdir;

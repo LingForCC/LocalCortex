@@ -1,7 +1,7 @@
 /**
  * Parses the machine-readable status block from an agent transcript.
  *
- * The prompt contract (rule-config-schema.md §2) asks the agent to emit, at the
+ * The prompt contract (rules README → "Prompt contract") asks the agent to emit, at the
  * end of its final message, a JSON block like:
  *   {"status":"<active|done|error>","reason":"<short explanation>"}
  *

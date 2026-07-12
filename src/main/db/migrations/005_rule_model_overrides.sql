@@ -5,7 +5,7 @@
 -- Existing rows survive untouched (NULL), preserving the prior behavior of
 -- letting the Codex runner's constructor default (the app setting) apply.
 --
--- Spec: docs/rule-config-schema.md (model / modelReasoningEffort fields).
+-- Spec: docs/features/rules/README.md (model / modelReasoningEffort fields).
 
 ALTER TABLE rules ADD COLUMN model TEXT;
 ALTER TABLE rules ADD COLUMN model_reasoning_effort TEXT;

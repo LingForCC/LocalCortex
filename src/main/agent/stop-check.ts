@@ -2,7 +2,7 @@
  * Stop-condition evaluation — decides whether a rule should be disabled after a
  * run, and why.
  *
- * Spec: docs/architecture.md §6.6, rule-config-schema.md §7.
+ * Spec: docs/architecture.md §6.6, docs/features/stop-conditions/README.md.
  *
  * Two complementary mechanisms:
  *  1. Agent-signaled completion: the parsed status block (active|done|error).

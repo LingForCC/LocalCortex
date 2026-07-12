@@ -1,7 +1,7 @@
 /**
  * Rule editor view — create/edit rules.
  *
- * Spec: docs/rule-config-schema.md. A form over the Rule schema: NL rule text,
+ * Spec: docs/features/rules/README.md. A form over the Rule schema: NL rule text,
  * trigger (tick|event), mcpServers, backend, workdir, sandbox, and the
  * maxRuns/expiresAt backstops. The `rule` field is free text (the rule IS the
  * spec); everything else is the minimal structure to run it.

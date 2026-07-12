@@ -1,7 +1,7 @@
 /**
  * Builds the full prompt sent to the agent for a run.
  *
- * Two responsibilities (architecture.md §7 step 4; rule-config-schema.md §2):
+ * Two responsibilities (architecture.md §7 step 4; rules README → "Prompt contract"):
  *
  *  1. Render event template variables (`{{workdir}}`, `{{summary}}`, …) into the
  *     user's rule text from the incoming event payload. Tick-triggered rules
@@ -54,7 +54,7 @@ function resolvePath(vars: Record<string, unknown>, path: string): unknown {
 }
 
 /**
- * The status contract appended to every run prompt (rule-config-schema.md §2,
+ * The status contract appended to every run prompt (rules README →
  * "Prompt contract"). The agent MUST emit a JSON status block at the end of its
  * final message so the app can decide whether to keep the rule active.
  */

@@ -1,12 +1,12 @@
 /**
  * Per-rule timer scheduler for tick-triggered rules.
  *
- * Spec: docs/architecture.md §3.4, §6.5, rule-config-schema.md §3.1.
+ * Spec: docs/architecture.md §3.4, §6.5, docs/features/triggers/README.md (tick trigger).
  *
  *  - Owns one timer per ENABLED, TICK-triggered rule. Event-triggered rules
  *    are ignored here (they fire via the ingress/matcher path).
  *  - Effective interval = rule.trigger.intervalSeconds ?? globalDefault, clamped
- *    to the 5-minute floor (rule-config-schema §11.2).
+ *    to the 5-minute floor (rules README → "Validation rules").
  *  - On each tick, enqueues a run via the provided callback (the run-loop owns
  *    the capped-parallelism queue).
  *

@@ -6,7 +6,7 @@ Covers rule **authoring, persistence, and CRUD**. The behavior of *running* a ru
 
 ## In scope
 
-- Zod schema validation (all of [rule-config-schema §11](../../rule-config-schema.md#11-validation-rules)).
+- Zod schema validation (all of [Rules README → validation rules](./README.md#validation-rules-enforced-on-save)).
 - Persistence: create / read / update / delete / set-enabled in the `rules` table.
 - IPC handlers (`rules:list/get/create/update/delete/setEnabled`).
 - Renderer UI: RuleEditor form + RuleList table interactions.
@@ -107,4 +107,4 @@ Run after any change to the rule editor or repository.
 
 ## Related
 - [Rules README](./README.md)
-- [design: rule-config-schema §11 validation](../../rule-config-schema.md#11-validation-rules)
+- [Rules README → validation rules](./README.md#validation-rules-enforced-on-save)

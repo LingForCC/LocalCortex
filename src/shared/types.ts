@@ -5,7 +5,7 @@
  * DB rows, event payloads, and IPC messages share one validation surface
  * (docs/tech-stack.md §2, §4).
  *
- * Mirrors docs/rule-config-schema.md §10.
+ * Mirrors docs/features/rules/README.md ("TypeScript types").
  */
 
 import type { z } from 'zod';
@@ -28,7 +28,7 @@ import type { AgentSchema } from './schemas/agent-schema.js';
 import type { TaskManagerSchema } from './schemas/task-manager-schema.js';
 import type { McpServerEntrySchema } from './schemas/mcp-server-schema.js';
 
-// --- Rule model (rule-config-schema.md §10) --------------------------------
+// --- Rule model (rules README → "TypeScript types") ------------------------
 
 export type AgentBackend = 'claude' | 'codex';
 export type SandboxMode = 'read-only' | 'workspace-write';

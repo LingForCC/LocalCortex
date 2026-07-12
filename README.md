@@ -156,6 +156,6 @@ webhook triggers, long-lived MCP pool, code signing/notarize, auto-update.
 ## Documentation
 
 - [`docs/architecture.md`](./docs/architecture.md) — the authoritative architecture reference.
-- [`docs/rule-config-schema.md`](./docs/rule-config-schema.md) — the user-facing rule config format.
+- [`docs/features/rules/README.md`](./docs/features/rules/README.md) — the user-facing rule config format (fields, types, validation).
 - [`docs/features/mcp-sources/README.md`](./docs/features/mcp-sources/README.md) — the MCP server config format, Sources-tab CRUD, and resolution.
 - [`docs/tech-stack.md`](./docs/tech-stack.md) — concrete tech choices, rationale, and gotchas.
