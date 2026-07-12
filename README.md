@@ -59,10 +59,11 @@ nvm use v22.14.0
 npm install
 ```
 
-On first launch the app writes a default `~/.localcortex/mcp-servers.json`
-containing the three v1 servers (`github`, `gitlab`, `todoist`) with
-`<your-token-here>` placeholders. **Edit that file to fill in real tokens** before
-running rules — the lifecycle manager rejects servers that still hold a placeholder.
+On first launch the app seeds the `mcp_servers` DB table with four default
+servers (`github`, `gitlab`, `todoist`, `omnifocus`) — the first three carrying
+`<your-token-here>` placeholders. **Fill in real tokens in the Sources tab**
+before running rules — the lifecycle manager rejects servers that still hold a
+placeholder.
 
 ## Scripts
 
@@ -138,9 +139,9 @@ Highlights:
   cadence is conservative (60 min) to bound token cost.
 - **No cross-run write deduplication** — ongoing rules (status stays `active`)
   may create duplicate tasks on each cycle. Users de-duplicate manually.
-- **Credentials are plaintext in `~/.localcortex/mcp-servers.json`** (created
-  with `0600` permissions). Codex per-run `.codex/config.toml` duplicates tokens
-  into the workdir and is deleted at run teardown.
+- **Credentials are plaintext in the `mcp_servers` SQLite table** (Electron's
+  userData directory) — same posture as a `0600` config file. Codex passes
+  tokens per-run as `--config` CLI args (visible in `ps`, no file on disk).
 - **Auto-execute** — writes land in the task manager immediately. Observability
   (run history) is the safety net, not a pre-write gate.
 - **Event ingress** is loopback-only but any process as the user can POST events.
@@ -156,5 +157,5 @@ webhook triggers, long-lived MCP pool, code signing/notarize, auto-update.
 
 - [`docs/architecture.md`](./docs/architecture.md) — the authoritative architecture reference.
 - [`docs/rule-config-schema.md`](./docs/rule-config-schema.md) — the user-facing rule config format.
-- [`docs/mcp-servers.md`](./docs/mcp-servers.md) — the MCP server config file format + resolution.
+- [`docs/features/mcp-sources/README.md`](./docs/features/mcp-sources/README.md) — the MCP server config format, Sources-tab CRUD, and resolution.
 - [`docs/tech-stack.md`](./docs/tech-stack.md) — concrete tech choices, rationale, and gotchas.

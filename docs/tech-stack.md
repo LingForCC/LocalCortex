@@ -51,7 +51,7 @@ Trade-offs we accept:
 See [§4](./tech-stack.md#4-database-strategy-node-sqlite--raw-sql--zod) for the data-access pattern.
 
 ### Zod
-Used pervasively: parsing the user-edited `mcp-servers.json`, validating rule config before save, validating event payloads at the ingress, parsing DB rows into typed objects, and validating IPC messages crossing the main/renderer boundary. One validation library, everywhere.
+Used pervasively: parsing MCP server config (Sources-tab JSON-paste mode), validating rule config before save, validating event payloads at the ingress, parsing DB rows into typed objects, and validating IPC messages crossing the main/renderer boundary. One validation library, everywhere.
 
 ### Fastify (event ingress)
 The local HTTP listener (`127.0.0.1:PORT/event`) needs request validation and JSON parsing; Fastify gives both with Zod-compatible schemas and is lighter than Express. For a single-endpoint loopback listener this is arguably more than needed, but the request-validation discipline is worth the dependency. (`node:http` is the fallback if we want zero deps here.)

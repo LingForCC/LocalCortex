@@ -54,7 +54,7 @@ Independent of backend, `sandbox` bounds what the agent may do to the **filesyst
 Both backends go through the same shared run-loop; only the spawn differs:
 
 1. **Staging** — both backends: resolves the workdir (honoring `rule.workdir`, else a per-rule scratch dir) and ensures it exists. Nothing is written to disk (MCP config is per-call).
-2. **MCP resolution + placeholder check** — both: servers resolved from `mcp-servers.json`; run fails fast if any env value is still `<your-token-here>`.
+2. **MCP resolution + placeholder check** — both: servers resolved from the `mcp_servers` DB table; run fails fast if any env value is still `<your-token-here>`.
 3. **Prompt** — identical for both (rendered rule + status contract + tool list).
 4. **Agent run** — both backends stream. Claude iterates `SDKMessage`s (assistant text, `tool_use`, result); Codex iterates the `runStreamed()` event stream (`item.completed`, `turn.completed`, …). Each runner normalizes its stream into the same result and optionally emits intermediate progress events (tool calls, assistant text) to the run-loop for live logging (see [Observability → Logging](../observability/README.md#logging-main-process)).
 5. **Normalize** — both produce `{ text, toolCalls[], inputTokens, outputTokens, isError }`.

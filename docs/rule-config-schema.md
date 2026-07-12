@@ -132,13 +132,13 @@ Event-triggered rules are the natural fit for "react when X happens" use cases �
 "mcpServers": ["gitlab", "todoist"]
 ```
 
-**Required.** The set of MCP servers spawned for this rule's runs, referenced by **name** as defined in the user's `~/.localcortex/mcp-servers.json`.
+**Required.** The set of MCP servers spawned for this rule's runs, referenced by **name** as defined in the **`mcp_servers` DB table** (edited via the Sources tab).
 
 This is the *only* structural selector in the rule, and it exists for a specific reason: **agent tool-selection quality.** Function-calling models degrade as the tool list grows — if a user has configured six servers (two GitHub accounts, GitLab, Jira, Todoist, OmniFocus), spawning all of them every run means the agent sees 60–120 tools and starts calling the wrong server or hallucinating tool names. Curating the toolset per rule keeps the agent accurate. It also bounds the credential blast radius — a rule can only touch the systems its servers connect to.
 
-Each name must exist as a key in `mcp-servers.json`. The same name can be used by multiple rules; users can also define multiple entries for the same upstream (e.g., `"github-personal"` and `"github-work"` pointing at different tokens) and pick per rule.
+Each name must exist as a row in `mcp_servers`. The same name can be used by multiple rules; users can also define multiple entries for the same upstream (e.g., `"github-personal"` and `"github-work"` pointing at different tokens) and pick per rule.
 
-The default config file ships with three entries — `github`, `gitlab`, `todoist` — but users can add or rename freely. See [mcp-servers.md](./mcp-servers.md) for the file format, the default config, and the resolution algorithm.
+The shipped seed defines four entries — `github`, `gitlab`, `todoist`, `omnifocus` — but users can add or rename freely. See [MCP sources](./features/mcp-sources/README.md) for the config format, seeded defaults, and resolution algorithm.
 
 All servers are external stdio servers, spawned per run — see [architecture.md §5.2, §5.4](./architecture.md#52-write-hosting--external-stdio-servers-uniformly).
 
@@ -315,8 +315,8 @@ export type AgentBackend = "claude" | "codex";
 export type SandboxMode = "read-only" | "workspace-write";
 export type TriggerType = "tick" | "event";
 /**
- * A server name as defined in ~/.localcortex/mcp-servers.json.
- * Open-ended (any string the user defined) — see mcp-servers.md.
+ * A server name as defined in the mcp_servers DB table.
+ * Open-ended (any string the user defined) — see features/mcp-sources/README.md.
  */
 export type McpServerName = string;
 
@@ -364,7 +364,7 @@ Enforced by the app before a rule is saved or run:
 1. `trigger` is **required** and must have a valid `type` (`tick` or `event`).
 2. For `trigger.type === "tick"`: `intervalSeconds`, if set, must be ≥ 300 (5 minute floor — every tick is a full agent run).
 3. For `trigger.type === "event"`: `eventType` is required and must be a non-empty string.
-4. `mcpServers` is **required** and must be non-empty. Every name in it must exist as a key in `~/.localcortex/mcp-servers.json`, and none may still hold a `<your-token-here>` placeholder token.
+4. `mcpServers` is **required** and must be non-empty. Every name in it must exist as a row in the `mcp_servers` DB table, and none may still hold a `<your-token-here>` placeholder token.
 5. `rule` must be non-empty.
 6. `sandbox === "workspace-write"` should prompt the user to confirm (filesystem write access to `workdir`).
 7. `maxRuns`, if set, must be a positive integer (or explicitly `null` for unlimited).

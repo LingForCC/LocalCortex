@@ -4,7 +4,7 @@ LocalCortex reaches every external system — GitHub, GitLab, Todoist, OmniFocus
 
 This is the same concept Claude Desktop and other MCP clients use: add or modify a server — no code change, no schema migration.
 
-> Design: [mcp-servers.md](../../mcp-servers.md) is the authoritative format reference.
+> This is the **authoritative reference** for the MCP server config format, seeded defaults, resolution algorithm, and security posture. (It supersedes the retired [`mcp-servers.md`](../../mcp-servers.md), which described the old file-based model.)
 
 ---
 
@@ -97,12 +97,58 @@ Define two entries (`github-personal`, `github-work`) pointing at different toke
 
 ---
 
+## Worked example, end to end
+
+Given this rule (see [Rules](../rules/README.md)):
+
+```jsonc
+{
+  "rule": "Fetch open PRs assigned to me in acme/web-app. For any in review >24h without approval, create a Todoist task under 'Engineering'.",
+  "mcpServers": ["github-personal", "todoist"]
+}
+```
+
+And these two rows in `mcp_servers` (e.g. added via the Sources tab):
+
+```jsonc
+{
+  "github-personal": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_abc123..." }
+  },
+  "todoist": {
+    "command": "npx",
+    "args": ["-y", "@abhiz123/todoist-mcp-server"],
+    "env": { "TODOIST_API_TOKEN": "tod_abc123..." }
+  }
+}
+```
+
+Resolution (one run):
+
+```
+"github-personal"
+  → lookup:   mcp_servers row by name
+  → resolved: npx ...server-github  env GITHUB_PERSONAL_ACCESS_TOKEN=ghp_abc123...
+
+"todoist"
+  → lookup:   mcp_servers row by name
+  → resolved: npx ...todoist-mcp-server  env TODOIST_API_TOKEN=tod_abc123...
+```
+
+Serialized for Claude → `options.mcpServers` (in-memory dict). Serialized for Codex → `options.config`, flattened into `--config` flags. The SDK spawns both servers as stdio child processes, and the agent connects to them for the duration of the run. See [Agent backends](../agent-backends/README.md).
+
+---
+
 ## Security notes
 
-- **Tokens are plaintext** in the SQLite DB (Electron's userData directory). This is the same posture as the previous 0600 file — anyone with read access to your user account (malware as you, backups, accidental sharing) can read them. See [design: security notes §8](../../mcp-servers.md#8-security-notes).
-- **Credentials reach servers only at spawn time** as process env. Not retained in app memory beyond the run.
-- **Per-run respawn** — each server process lives only for one agent run. No long-lived process holds credentials.
-- **Codex passes tokens as CLI args** (`--config mcp_servers.<name>.env.<TOKEN>=<value>`), visible in `ps` during the run. No token file is written to disk. Claude passes servers as an in-memory dict, never on the command line.
+- **Tokens are plaintext** in the SQLite DB (in Electron's userData directory). Anyone with read access to your user account — malware running as you, backup systems, or accidental sharing — can read them. This is the same posture as the old `0600` config file; the threat model is unchanged.
+  - **Mitigation:** users who need stronger protection can place the userData directory (or home directory) on an encrypted volume, or use a secrets manager that materializes credentials at login.
+- **Credentials reach servers only at spawn time** as process env on the child process. They are not retained in app memory beyond the run.
+- **Per-run respawn** — each server process lives only for the duration of one agent run. No long-lived process holds credentials.
+- **Codex passes tokens as CLI args** (`--config mcp_servers.<name>.env.<TOKEN>=<value>`), visible in `ps`/process listings during the run. This is local to your own processes and ephemeral — no token-bearing file is written to disk, so there is nothing to clean up at teardown. Claude avoids this surface entirely (servers passed as an in-memory `options.mcpServers` dict, never on the command line).
+- **`mcpServers` bounds the credential blast radius.** A rule can only touch the systems its declared servers connect to — keep each rule's list minimal.
 
 ## Gotchas
 - **Saving a rule ≠ its servers are ready.** A rule referencing an undefined server saves fine but fails at run time. Use the Sources tab or a run attempt to surface the error.
@@ -113,4 +159,3 @@ Define two entries (`github-personal`, `github-work`) pointing at different toke
 - [Rules](../rules/README.md) — the `mcpServers` field.
 - [Handoff setup](../handoff-setup/README.md) — the first-run wizard that uses the catalog.
 - [Agent backends](../agent-backends/README.md) — how servers are attached per backend.
-- [design: mcp-servers.md](../../mcp-servers.md) — full format, default config, resolution algorithm.

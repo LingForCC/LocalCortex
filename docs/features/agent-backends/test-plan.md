@@ -82,7 +82,7 @@ Both runners import their respective SDKs and are type-checked end-to end:
 
 ## Manual test plan (requires credentials)
 
-Prep: set `ANTHROPIC_API_KEY` (Claude) and/or `OPENAI_API_KEY` (Codex); fill tokens in `~/.localcortex/mcp-servers.json`.
+Prep: set `ANTHROPIC_API_KEY` (Claude) and/or `OPENAI_API_KEY` (Codex); fill tokens in the Sources tab (the `mcp_servers` table).
 
 ### Claude
 | # | Case | Steps | Expected |

@@ -35,7 +35,7 @@ A **rule** is a natural-language instruction that an agent (Claude or Codex) exe
 | `name` | yes | Human-readable label, shown in the rule list. |
 | `rule` | yes | The natural-language instruction. Non-empty. |
 | `trigger` | yes | How the rule fires — `tick` (schedule) or `event` (HTTP). See [Triggers](../triggers/README.md). |
-| `mcpServers` | yes | Which MCP servers to attach (curates the agent's toolset). Non-empty; every name must exist in `mcp-servers.json`. See [MCP sources](../mcp-sources/README.md). |
+| `mcpServers` | yes | Which MCP servers to attach (curates the agent's toolset). Non-empty; every name must exist in the `mcp_servers` table. See [MCP sources](../mcp-sources/README.md). |
 | `backend` | yes | `claude` or `codex`. See [Agent backends](../agent-backends/README.md). |
 | `enabled` | no (default `true`) | Whether the scheduler/ingress will fire the rule. |
 | `workdir` | no | Directory the agent runs in. Omit for a per-rule scratch dir. Honored by both Claude and Codex; see [Agent backends](../agent-backends/README.md). |
@@ -90,7 +90,7 @@ These mirror [rule-config-schema §11](../../rule-config-schema.md#11-validation
 1. `trigger` is required and must be a valid type (`tick` or `event`).
 2. Tick: `intervalSeconds`, if set, must be ≥ **300** (5-minute floor — every tick is a full agent run).
 3. Event: `eventType` is required and non-empty.
-4. `mcpServers` is required and non-empty. Every name must exist in `mcp-servers.json` **and** hold no `<your-token-here>` placeholder.
+4. `mcpServers` is required and non-empty. Every name must exist in the `mcp_servers` table **and** hold no `<your-token-here>` placeholder.
 5. `rule` must be non-empty.
 6. `maxRuns`, if set, must be a positive integer (or `null` for unlimited).
 7. `expiresAt`, if set, must be a valid ISO timestamp in the future.

@@ -145,6 +145,5 @@ serializers, or the Sources UI.
 ---
 
 ## Related
-- [MCP sources README](./README.md)
+- [MCP sources README](./README.md) — authoritative config-format reference.
 - [Handoff setup test plan](../handoff-setup/test-plan.md) (onboarding wizard interactions with the catalog)
-- [design: mcp-servers.md](../../mcp-servers.md)

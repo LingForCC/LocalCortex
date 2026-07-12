@@ -193,8 +193,9 @@ task manager only in `mcpServers` + prompt text.
 
 ### OmniFocus (external MCP server)
 
-Configure your external OmniFocus MCP server in `~/.localcortex/mcp-servers.json`
-under the name `omnifocus`, then:
+Configure your external OmniFocus MCP server in the **Sources tab** under the
+name `omnifocus` (it's seeded by default — just point it at your server path),
+then:
 
 ```jsonc
 {

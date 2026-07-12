@@ -112,8 +112,10 @@ Boundary rules that matter:
   reference (module map §4, lifecycle §5–7, constraints §8, out-of-scope §9).
 - [`docs/rule-config-schema.md`](./docs/rule-config-schema.md) — rule config
   format + validation rules enforced before save (§11).
-- [`docs/mcp-servers.md`](./docs/mcp-servers.md) — MCP server config format,
-  resolution, and placeholder rules (now DB-backed, not file-based).
+- [`docs/features/mcp-sources/README.md`](./docs/features/mcp-sources/README.md) —
+  MCP server config format, Sources-tab CRUD, resolution, and placeholder rules
+  (DB-backed, not file-based). The older [`docs/mcp-servers.md`](./docs/mcp-servers.md)
+  is deprecated and describes the retired file-based model.
 - [`docs/tech-stack.md`](./docs/tech-stack.md) — concrete tech choices, rationale,
   and the "factor logic out of Electron" testing rule (§5).
 - [`docs/features/`](./docs/features/) — per-feature specs (rules, triggers,

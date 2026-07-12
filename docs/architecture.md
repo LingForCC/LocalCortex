@@ -121,7 +121,7 @@ localcortex/
 │   │   ├── ipc/                   ← IPC handlers (renderer ↔ main)
 │   │   │   ├── rules.ts           ← CRUD over rules
 │   │   │   ├── runs.ts            ← run history, manual trigger
-│   │   │   └── servers.ts         ← read/validate mcp-servers.json
+│   │   │   └── servers.ts         ← read/validate MCP servers (mcp_servers DB table)
 │   │   ├── scheduler/
 │   │   │   ├── scheduler.ts       ← per-rule timers (tick-triggered rules only)
 │   │   │   └── concurrency.ts     ← capped-parallelism queue (shared w/ events)
@@ -141,9 +141,9 @@ localcortex/
 │   │   │   └── staging.ts         ← per-run workdir setup + teardown
 │   │   ├── mcp/
 │   │   │   ├── lifecycle.ts       ← spawn per run, inject config, pass to SDK
-│   │   │   ├── config-loader.ts   ← loads ~/.localcortex/mcp-servers.json
+│   │   │   ├── config-loader.ts   ← legacy JSON parser (used only by one-time import)
 │   │   │   ├── config.ts          ← serialize to Claude mcpServers / Codex options.config
-│   │   │   └── default-config.ts  ← bundled default written on first launch
+│   │   │   └── default-config.ts  ← deprecated; defaults now seeded by DB migration 004
 │   │   ├── db/
 │   │   │   ├── schema.sql         ← rules, runs tables
 │   │   │   ├── client.ts          ← SQLite wrapper
@@ -163,27 +163,28 @@ localcortex/
 - **`scheduler/`** — owns the per-rule timers for **tick-triggered** rules and the concurrency cap (shared with the event path). Reads `tickIntervalSeconds` per rule, falls back to the global default. Enqueues agent runs into the capped-parallelism queue.
 - **`events/`** — the local event ingress for **event-triggered** rules. An HTTP listener on `127.0.0.1:PORT/event` receives POSTed JSON events from external sources (Codex hooks, Claude Code hooks, shell scripts, build tools). The matcher routes each event to rules registered for its `eventType`, optionally filtered by fields like `workdir`, and enqueues an agent run with the event payload rendered into the rule text as template variables. Ships a `codex-hook.sh` that bridges Codex's `session-complete` hook to the ingress. See [§6.7](./architecture.md#67-event-ingress--local-http-listener).
 - **`agent/`** — the `AgentRunner` interface with two implementations (Claude, Codex). The prompt builder renders event template variables (`{{workdir}}`, `{{summary}}`, …) into the rule text, then assembles the full prompt with status contract + available MCP tools. Staging prepares the per-run workdir.
-- **`mcp/`** — the MCP lifecycle manager. Loads `~/.localcortex/mcp-servers.json` (writing the bundled default on first launch), resolves each rule-referenced server name to its full spawn config, and serializes that config per backend (`mcpServers` dict for Claude, `options.config` object for Codex). Server definitions — including credentials — live in the user-editable file, not in code or SQLite. See [mcp-servers.md](./mcp-servers.md).
-- **`db/`** — single SQLite, app-owned. Tables: `rules`, `runs`. The agent runs themselves are stateless from the app's view; the DB tracks config and history. Credentials are **not** stored here — they live in the MCP server config file.
+- **`mcp/`** — the MCP lifecycle manager. Reads server definitions from the **`mcp_servers` SQLite table** (`McpServersRepository.getAsConfig()`), resolves each rule-referenced server name to its full spawn config, and serializes that config per backend (`mcpServers` dict for Claude, `options.config` object for Codex). Server definitions — including credentials — live in the DB (edited via the Sources tab), not in code or on disk. See [MCP sources](./features/mcp-sources/README.md).
+- **`db/`** — single SQLite, app-owned. Tables: `rules`, `runs`, `mcp_servers`. The agent runs themselves are stateless from the app's view; the DB tracks config and history. MCP server credentials **are** stored here (plaintext, in `mcp_servers.env`).
 - **`observability/`** — records every run (prompt, tool calls, token cost, duration, result). The primary safety net under auto-execute.
 
 ---
 
 ## 5. MCP integration
 
-### 5.1 Server definitions — user-editable config file
+### 5.1 Server definitions — DB-backed catalog
 
-Server definitions live in a **user-editable JSON file** at `~/.localcortex/mcp-servers.json`, not in code. The app writes a bundled default on first launch containing the three v1 servers (with placeholder tokens the user fills in). Rules reference servers by name; the file holds the full spawn config — command, args, and credentials as plaintext env values. This is the same model Claude Desktop and other MCP clients use: users add or modify servers by editing the file, with no code change or schema migration. See [mcp-servers.md](./mcp-servers.md) for the file format, default config, resolution algorithm, and security notes.
+Server definitions live in the **`mcp_servers` SQLite table**, edited in-app through the **Sources** tab (form or JSON-paste mode) — not in code or on disk. Migration `004_catalog.sql` seeds four defaults on first run (with placeholder tokens the user fills in). Rules reference servers by name; each row holds the full spawn config — command, args, and credentials as plaintext env values. This is the same concept Claude Desktop and other MCP clients use: users add or modify servers with no code change or schema migration. See [MCP sources](./features/mcp-sources/README.md) for the config format, seeded defaults, Sources-tab CRUD, resolution algorithm, and security notes.
 
-The shipped default covers:
+The shipped seed covers:
 
 | Name | Role | Upstream | Status |
 |---|---|---|---|
 | `github` | source (read) | official `github-mcp-server` | robust |
 | `gitlab` | source (read) | official GitLab Duo MCP or community `yoda-digital/mcp-gitlab-server` | robust |
 | `todoist` | sink (write) | official Todoist MCP server | robust |
+| `omnifocus` | sink (write) | community `omnifocus-mcp` (no token required) | robust |
 
-Users can rename these, add others (e.g., `github-personal` / `github-work` for multiple accounts), or add entirely new upstreams.
+Users can rename these, add others (e.g., `github-personal` / `github-work` for multiple accounts), or add entirely new upstreams. (A previous version stored these in a static `~/.localcortex/mcp-servers.json` file; that file is retired, and a one-time import reads any legacy file on upgrade.)
 
 ### 5.2 Write hosting — external stdio servers, uniformly
 
@@ -388,7 +389,7 @@ A run is enqueued by one of two paths, then shares everything from step 2 onward
 - **Per-cycle cost is unavoidable.** Every tick spins up the agent to re-fetch and re-evaluate source state, even when nothing changed. The global default interval (60 min) is set conservatively to bound this; lowering it raises cost linearly. If this becomes a real problem, a deterministic poller can be layered in front of the agent later without re-architecting — the scheduler already owns the cadence, and a poller is just a "should we wake the agent?" check inserted before step 2.
 - **No cross-run write deduplication.** Each agent run is a fresh session with no memory of prior writes, and the app does not track which writes a rule has already performed. The status contract protects **one-off** rules (a rule signaled `done` stops running before it can re-create the same task), but **ongoing rules** — those whose status stays `active` indefinitely, like "watch all my PRs and create a task for any stale one" — may create duplicate tasks on each cycle, because the agent has no way to know it already created a task for the same item on a previous run. One-off rules are also at risk if status parsing fails (the rule keeps running and duplicates on the next cycle). Users should expect to de-duplicate manually in the task manager, or keep ongoing rules scoped narrowly. If this proves painful, an idempotency mechanism (a key written into each task's note at creation + a `find_by_key` content search before creating) can be added without re-architecting — it slots into the prompt contract and the write MCP servers. See [rule-config-schema.md §11](./rule-config-schema.md#11-open-questions-for-future-iterations).
 - **Codex MCP credentials pass as CLI args.** MCP server tokens (e.g. `GITHUB_PERSONAL_ACCESS_TOKEN`) are delivered to Codex via `--config mcp_servers.<name>.env.<KEY>=<value>` flags, which are visible in `ps`/process listings for the duration of the run. This is local to the user's own processes and ephemeral (no file persists), so it avoids the teardown-failure token-leak risk of an on-disk config file — but it is a different surface than a `0600` file. Claude avoids this entirely (servers are passed as an in-memory dict via `options.mcpServers`, never on the command line).
-- **Credentials are stored as plaintext in `~/.localcortex/mcp-servers.json`.** This is the deliberate trade-off of the user-editable config-file approach: the file is self-contained and simple, but anyone with read access to the user's home directory can read the tokens. Mitigation: the app creates the file with `0600` permissions; users who need stronger protection can store it on an encrypted volume. See [mcp-servers.md §8](./mcp-servers.md#8-security-notes).
+- **Credentials are stored as plaintext in the `mcp_servers` DB table** (in Electron's userData directory). This is the deliberate trade-off of the user-editable catalog approach: anyone with read access to the user's account can read the tokens. Mitigation: users who need stronger protection can place the userData directory on an encrypted volume. See [MCP sources → Security notes](./features/mcp-sources/README.md#security-notes).
 - **Codex `--config` overrides merge with, not replace, `~/.codex/config.toml`.** The resolved MCP servers are layered on top of the user's global Codex config via dotted-path `--config` flags, so they coexist with whatever else the user has configured there. If the user has *also* declared a same-named MCP server in `~/.codex/config.toml`, the per-call override wins for that server's fields. Auth (`~/.codex/auth.json`) is read from the normal config home and is unaffected.
 - **Auto-execute means mistakes land in the task manager immediately.** Idempotency keys prevent duplicates but not *wrong* tasks. Observability + easy bulk-edit in the UI are the mitigation. A future dry-run mode or per-run interactive gate (Claude's `canUseTool`) can layer on later without re-architecting.
 - **Stop-condition detection depends on parsing a JSON suffix from the agent's output.** If the agent omits the status block, emits malformed JSON, or embeds it mid-message where the parser can't find it, the app can't detect `done` and the rule keeps running until it hits the `maxRuns`/`expiresAt` backstop (or runs forever if neither is set). Mitigation: the parser should be lenient (scan the whole transcript for the first valid status block), the prompt contract should strongly emphasize the suffix requirement, and `maxRuns` should have a sensible default so no rule is truly unbounded. If parsing proves unreliable in practice, the fallback is a dedicated `set_rule_status` tool call instead of a JSON suffix.
