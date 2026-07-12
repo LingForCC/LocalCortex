@@ -19,6 +19,7 @@ import handoffsEnabledSql from './migrations/003_handoffs_enabled.sql?raw';
 import catalogSql from './migrations/004_catalog.sql?raw';
 import ruleModelOverridesSql from './migrations/005_rule_model_overrides.sql?raw';
 import handoffProfilesSql from './migrations/006_handoff_profiles.sql?raw';
+import handoffProfilesRenameSql from './migrations/007_handoff_profiles_rename.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -38,6 +39,7 @@ const MIGRATIONS: Migration[] = [
   { version: 4, sql: catalogSql },
   { version: 5, sql: ruleModelOverridesSql },
   { version: 6, sql: handoffProfilesSql },
+  { version: 7, sql: handoffProfilesRenameSql },
 ];
 
 /** Result of running migrations. */
@@ -61,6 +63,40 @@ export function currentVersion(db: DatabaseSync): number {
 }
 
 /**
+ * Conditionally rename the legacy `handoff_combos` table (created by the
+ * pre-rename migration 006) to `handoff_profiles`, and rewrite the legacy
+ * migrated row id. No-op when `handoff_combos` doesn't exist (fresh DBs, or the
+ * rename already ran). Called from within migration 7's transaction.
+ */
+function applyHandoffProfilesRename(db: DatabaseSync): void {
+  const hasOld = (
+    db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_combos'`)
+      .get() as { 1?: number } | undefined
+  ) !== undefined;
+  if (!hasOld) return;
+
+  const hasNew = (
+    db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_profiles'`)
+      .get() as { 1?: number } | undefined
+  ) !== undefined;
+  if (hasNew) {
+    // Both exist — shouldn't happen normally. Drop the old one to avoid leaving
+    // an orphan rather than risk duplicating data.
+    db.exec(`DROP TABLE handoff_combos`);
+    return;
+  }
+
+  db.exec(`ALTER TABLE handoff_combos RENAME TO handoff_profiles`);
+  // Rewrite the legacy migrated row id so it matches what the renamed
+  // migration 006 produces on a fresh DB.
+  db.prepare(
+    `UPDATE handoff_profiles SET id = 'profile-handoff-auto' WHERE id = 'combo-handoff-auto'`,
+  ).run();
+}
+
+/**
  * Apply all pending migrations, in order, each in its own transaction.
  * Idempotent: if everything is applied, this is a no-op.
  */
@@ -74,6 +110,15 @@ export function runMigrations(db: DatabaseSync): MigrationResult {
     db.exec('BEGIN');
     try {
       db.exec(m.sql);
+      // Migration 7 renames the legacy handoff_combos table (created by the
+      // pre-rename migration 006) to handoff_profiles. This is done here rather
+      // than in the SQL body because pure SQL can't reference a table that may
+      // not exist — fresh DBs never had handoff_combos, so any `ALTER TABLE
+      // handoff_combos` would error at resolve time. Guarding via sqlite_master
+      // here makes it a safe no-op on fresh DBs. See 007_handoff_profiles_rename.sql.
+      if (m.version === 7) {
+        applyHandoffProfilesRename(db);
+      }
       db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(m.version);
       db.exec('COMMIT');
     } catch (e) {

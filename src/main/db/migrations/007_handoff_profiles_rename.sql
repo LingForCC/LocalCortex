@@ -1,0 +1,18 @@
+-- Rename handoff_combos → handoff_profiles for DBs that already applied the
+-- original migration 006 (under its old 006_handoff_combos.sql name, which
+-- created a handoff_combos table).
+--
+-- This migration's SQL body is intentionally empty. The rename is performed in
+-- the migration runner (src/main/db/migrate.ts) as a guarded, conditional
+-- ALTER TABLE, because pure SQL cannot reference a table that may not exist:
+-- both `INSERT ... FROM handoff_combos` and `ALTER TABLE handoff_combos` error
+-- at resolve time on fresh DBs (where handoff_combos was never created). The
+-- runner checks sqlite_master first and only runs the rename when the old table
+-- actually exists, so this migration is a safe no-op on fresh DBs.
+--
+-- The runner also rewrites the legacy migrated row id 'combo-handoff-auto' →
+-- 'profile-handoff-auto' after the rename so it matches what the renamed
+-- migration 006 would produce on a fresh DB.
+--
+-- No SQL to execute. The presence of this migration in MIGRATIONS bumps
+-- schema_version to 7, which is what gates the runner-side rename.
