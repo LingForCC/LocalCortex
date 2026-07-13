@@ -20,6 +20,7 @@ import catalogSql from './migrations/004_catalog.sql?raw';
 import ruleModelOverridesSql from './migrations/005_rule_model_overrides.sql?raw';
 import handoffProfilesSql from './migrations/006_handoff_profiles.sql?raw';
 import handoffProfilesRenameSql from './migrations/007_handoff_profiles_rename.sql?raw';
+import claudeCodeAgentSql from './migrations/008_claude_code_agent.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -40,6 +41,7 @@ const MIGRATIONS: Migration[] = [
   { version: 5, sql: ruleModelOverridesSql },
   { version: 6, sql: handoffProfilesSql },
   { version: 7, sql: handoffProfilesRenameSql },
+  { version: 8, sql: claudeCodeAgentSql },
 ];
 
 /** Result of running migrations. */

@@ -52,8 +52,14 @@ export const PLACEHOLDER_TOKEN = '<your-token-here>';
 /** Event type emitted by the shipped Codex `session-complete` hook (arch §6.7). */
 export const CODEX_SESSION_COMPLETE_EVENT = 'codex.session-complete';
 
-/** Event type for Claude Code session completion (arch §3.4). */
-export const CLAUDE_SESSION_COMPLETE_EVENT = 'claude.session-complete';
+/**
+ * Event type emitted by the shipped Claude Code `Stop` hook bridge
+ * (packaging/claude-hook-plugin/). The hook plugin POSTs this when a Claude
+ * Code session ends, carrying `payload.sessionId` (read from the
+ * CLAUDE_SESSION_ID env var). Matches the builtin `claude-code` agents-catalog
+ * row's `sessionCompleteEventType` (migration 008).
+ */
+export const CLAUDE_CODE_SESSION_COMPLETE_EVENT = 'claude-code.session-complete';
 
 /**
  * Event type emitted by the shipped ZCode `Stop` hook bridge
@@ -81,6 +87,16 @@ export const CODEX_PROMPT_SUBMIT_EVENT = 'codex.prompt-submit';
  * drive event-triggered rules that match it.
  */
 export const ZCODE_PROMPT_SUBMIT_EVENT = 'zcode.prompt-submit';
+
+/**
+ * Event type emitted by the Claude Code `UserPromptSubmit` hook bridge
+ * (packaging/claude-hook-plugin/ with LC_EVENT_TYPE=claude-code.prompt-submit).
+ * Mirrors the other prompt-submit events: fires when a Claude Code user submits
+ * a prompt, opens the handoff-attach popup, and — like any event type — can
+ * drive event-triggered rules that match it. Matches the builtin `claude-code`
+ * agents-catalog row's `promptSubmitEventType` (migration 008).
+ */
+export const CLAUDE_CODE_PROMPT_SUBMIT_EVENT = 'claude-code.prompt-submit';
 
 /** Status values the agent emits in the status-contract block (arch §6.6). */
 export const RULE_STATUSES = ['active', 'done', 'error'] as const;

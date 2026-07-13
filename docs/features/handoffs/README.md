@@ -155,7 +155,11 @@ Codex's first-party hooks; wire it into your Codex hooks config. For the
 prompt-submit popup, also wire `src/main/events/codex-prompt-submit-hook.sh`
 into the Codex `UserPromptSubmit` hook — it reads the session id from Codex's stdin
 JSON and POSTs a `codex.prompt-submit` event. Claude Code is analogous
-(`CLAUDE_SESSION_ID`, `claude.session-complete` / `claude.prompt-submit`).
+(`CLAUDE_SESSION_ID`, `claude-code.session-complete` / `claude-code.prompt-submit`)
+— and is wired up automatically: the shipped **`localcortex-hook` plugin**
+(see `packaging/claude-hook-plugin/`) registers both hooks, and Claude Code is a
+builtin coding agent (seeded by migration 008), so no custom catalog entry is
+needed.
 
 ### Cursor / others
 

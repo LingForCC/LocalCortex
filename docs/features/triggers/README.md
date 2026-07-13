@@ -48,11 +48,11 @@ The rule fires the moment a matching event arrives at the app's **local HTTP ing
 
 | Field | Meaning |
 | --- | --- |
-| `eventType` | Required, non-empty. Matched against the event's `type` **exactly** (e.g. `codex.session-complete`, `zcode.prompt-submit`, `build.failed`). Open-ended — whatever a source POSTs. |
+| `eventType` | Required, non-empty. Matched against the event's `type` **exactly** (e.g. `codex.session-complete`, `zcode.prompt-submit`, `claude-code.session-complete`, `build.failed`). Open-ended — whatever a source POSTs. |
 | `filter` | Optional. Glob filters on event-payload fields. v1 supports `*` / `?` globbing on string fields. |
 
 > **`prompt-submit` events are normal event types.** A `<source>.prompt-submit`
-> event type (e.g. `zcode.prompt-submit`, `codex.prompt-submit`) opens the
+> event type (e.g. `zcode.prompt-submit`, `codex.prompt-submit`, `claude-code.prompt-submit`) opens the
 > handoff-attach popup via the ingress `onEvent` observer — but **only if an
 > enabled handoff profile references that event's agent** — **and** can trigger
 > rules just like any other event type; they are not popup-only. Rule matching

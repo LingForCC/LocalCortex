@@ -13,10 +13,10 @@ when a coding agent finishes a task:
 You can configure **multiple handoff profiles** and run them simultaneously.
 Each profile owns its own auto-created rule, and because each agent emits a
 *distinct* `session-complete` event type (`zcode.session-complete`,
-`codex.session-complete`, …), the matcher fires every matching rule
-independently. So you can have one profile routing ZCode sessions to OmniFocus
-and another routing Codex sessions to OmniFocus — both active at the same time,
-each configured separately.
+`codex.session-complete`, `claude-code.session-complete`, …), the matcher fires
+every matching rule independently. So you can have one profile routing ZCode
+sessions to OmniFocus and another routing Codex sessions to OmniFocus — both
+active at the same time, each configured separately.
 
 > **Naming note:** handoff profiles were formerly called "combos".
 
@@ -41,8 +41,14 @@ A common multi-profile layout:
 | --- | --- | --- | --- |
 | ZCode → OmniFocus | ZCode | OmniFocus | Claude |
 | Codex → OmniFocus | Codex | OmniFocus | Codex |
+| Claude Code → OmniFocus | Claude Code | OmniFocus | Claude |
 
-Both fire independently on their own agent's `session-complete` events.
+Each fires independently on its own agent's `session-complete` events.
+
+> **Builtin coding agents** (seeded by migrations 004 + 008): **ZCode**,
+> **Codex**, and **Claude Code**. Claude Code ships a hook plugin
+> (`packaging/claude-hook-plugin/`) that emits `claude-code.session-complete` /
+> `claude-code.prompt-submit` events, so no custom catalog entry is needed.
 
 ---
 

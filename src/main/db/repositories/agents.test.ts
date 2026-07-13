@@ -23,10 +23,10 @@ const customAgent: Omit<AgentEntry, 'createdAt' | 'updatedAt'> = {
 };
 
 describe('AgentsRepository — seeding', () => {
-  it('seeds zcode and codex on migration', () => {
+  it('seeds zcode, codex, and claude-code on migration', () => {
     const repo = new AgentsRepository(db);
     const ids = repo.list().map((a) => a.id);
-    expect(ids).toEqual(expect.arrayContaining(['zcode', 'codex']));
+    expect(ids).toEqual(expect.arrayContaining(['zcode', 'codex', 'claude-code']));
   });
 
   it('seeds agents with the correct event types', () => {
@@ -35,6 +35,16 @@ describe('AgentsRepository — seeding', () => {
     expect(zcode?.sessionCompleteEventType).toBe('zcode.session-complete');
     expect(zcode?.promptSubmitEventType).toBe('zcode.prompt-submit');
     expect(zcode?.source).toBe('zcode');
+  });
+
+  it('seeds claude-code with the event types the hook plugin emits', () => {
+    const repo = new AgentsRepository(db);
+    const claudeCode = repo.get('claude-code');
+    expect(claudeCode?.label).toBe('Claude Code');
+    expect(claudeCode?.sessionCompleteEventType).toBe('claude-code.session-complete');
+    expect(claudeCode?.promptSubmitEventType).toBe('claude-code.prompt-submit');
+    expect(claudeCode?.source).toBe('claude-code');
+    expect(claudeCode?.isBuiltin).toBe(true);
   });
 });
 
@@ -51,7 +61,7 @@ describe('AgentsRepository — CRUD', () => {
     const repo = new AgentsRepository(db);
     repo.create(customAgent);
     const ids = repo.list().map((a) => a.id);
-    // Builtins (zcode, codex) should come before the custom one.
+    // Builtins (zcode, codex, claude-code) should come before the custom one.
     expect(ids.indexOf('zcode')).toBeLessThan(ids.indexOf('cursor'));
     expect(ids.indexOf('codex')).toBeLessThan(ids.indexOf('cursor'));
   });
