@@ -89,7 +89,10 @@ const promptWindows = new Map<string, BrowserWindow>();
  */
 function pushThemeToRenderer(): void {
   const dark = nativeTheme.shouldUseDarkColors;
-  mainWindow?.webContents.send(IPC.THEME_APPLY, dark);
+  // `mainWindow` is reset to `null` in `createWindow`'s `closed` handler, but a
+  // destroyed window can still be non-null in edge cases — guard explicitly so a
+  // `.send` on a stale handle never throws "Object has been destroyed".
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.THEME_APPLY, dark);
 }
 
 /**
@@ -280,7 +283,12 @@ async function bootstrap(): Promise<void> {
   registerRulesIpc(rulesRepo);
   // Broadcast handoff mutations to the main window so its Handoffs list refreshes
   // regardless of where the change originated (main panel vs. prompt-submit popup).
-  registerHandoffsIpc(handoffsRepo, () => mainWindow?.webContents.send(IPC.HANDOFFS_CHANGED));
+  // Guard against a destroyed main window: the popup may persist after the main
+  // window is closed on macOS, and a `.send` on a stale handle throws
+  // "Object has been destroyed", which would reject the `handoffs:create` IPC.
+  registerHandoffsIpc(handoffsRepo, () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.HANDOFFS_CHANGED);
+  });
   registerRunsIpc(runsRepo, (ruleId, eventPayload) =>
     enqueueRun(
       ruleId,
@@ -333,6 +341,11 @@ async function createWindow(): Promise<void> {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+
+  // Drop the reference once the window is gone so downstream `?.` chains (theme
+  // push, handoffs-changed broadcast) short-circuit instead of touching a stale,
+  // destroyed handle.
+  mainWindow.on('closed', () => { mainWindow = null; });
 
   // Once the renderer has loaded, its preload `theme.onApply` listener is
   // registered; push the current effective scheme so the first paint matches
