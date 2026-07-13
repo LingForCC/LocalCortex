@@ -33,18 +33,33 @@ export const HANDOFF_RULE_ID = 'handoff-auto';
 export const HANDOFF_RULE_NAME = 'Handoff (auto-created)';
 
 /**
- * The default natural-language prompt for the handoff rule. Instructs the agent
- * to create a review subtask under the parent task when a session completes,
- * using the task-manager MCP server. Renders `{{parentTaskId}}` and
- * {{parentTaskName}} from the handoff context merged into the event payload at
- * enrichment time. No-ops when no parentTaskId is present (a handoff wasn't
- * attached for this session).
+ * The generic "how to create a task" instruction used when a task manager has
+ * no explicit `createTaskInstructions`. Used as step 2 of the default prompt so
+ * the agent still has a clear instruction even without tool-specific guidance.
  */
-export const DEFAULT_HANDOFF_RULE_TEXT = `You are a task-management assistant. When a coding agent session completes, create a review subtask so the user remembers to review the agent's work.
+export const FALLBACK_CREATE_TASK_INSTRUCTIONS =
+  'Using the available MCP task-manager server, create a new subtask (or follow-up task) under {{parentTaskId}}. Use {{parentTaskName}} for context if available.';
+
+/**
+ * Build the default natural-language prompt for the handoff rule, tailored to
+ * the task manager. When the task manager carries `createTaskInstructions`
+ * (tool name + params, e.g. "Call mcp:omnifocus/add_omnifocus_task …"), that
+ * text becomes step 2 verbatim so the agent knows the exact tool to call
+ * instead of guessing from the attached server list. Otherwise step 2 falls
+ * back to the generic instruction above.
+ *
+ * Either way the prompt renders `{{parentTaskId}}` / `{{parentTaskName}}` from
+ * the handoff context merged into the event payload at enrichment time, and
+ * no-ops when no parentTaskId is present (a handoff wasn't attached for this
+ * session).
+ */
+export function buildDefaultHandoffRuleText(taskManager: TaskManagerEntry): string {
+  const createTask = taskManager.createTaskInstructions?.trim() || FALLBACK_CREATE_TASK_INSTRUCTIONS;
+  return `You are a task-management assistant. When a coding agent session completes, create a review subtask so the user remembers to review the agent's work.
 
 Steps:
 1. Read the parent task id from {{parentTaskId}}. If it is empty, output the status block with status=active and reason="no parent task" — do nothing else.
-2. Using the available MCP task-manager server, create a new subtask (or follow-up task) under {{parentTaskId}}. Use {{parentTaskName}} for context if available.
+2. ${createTask}
 3. The subtask should remind the user to review the completed work. Title it something like "Review: {{parentTaskName}}".
 
 Always end with a status block:
@@ -52,6 +67,7 @@ Always end with a status block:
 status: active | done | error
 reason: <one line>
 </status>`;
+}
 
 /**
  * Build a new handoff Rule owned by a profile. The caller supplies the rule id
@@ -63,7 +79,8 @@ reason: <one line>
  *   - runs on the independently-chosen backend
  *   - uses the task manager's MCP server
  *   - is read-only (MCP tool calls aren't filesystem writes)
- *   - has the default review-subtask prompt
+ *   - has the default review-subtask prompt, tailored to the task manager's
+ *     `createTaskInstructions` (tool name + params) when present
  */
 export function buildHandoffProfileRule(
   agent: AgentEntry,
@@ -75,7 +92,7 @@ export function buildHandoffProfileRule(
     id: options.id,
     name: options.name ?? HANDOFF_RULE_NAME,
     enabled: true,
-    rule: DEFAULT_HANDOFF_RULE_TEXT,
+    rule: buildDefaultHandoffRuleText(taskManager),
     trigger: {
       type: 'event',
       eventType: agent.sessionCompleteEventType,
@@ -97,7 +114,9 @@ export function buildHandoffProfileRule(
  * overwritten.
  *
  * Preserved user-editable fields:
- *   - `rule`        (prompt text)
+ *   - `rule`        (prompt text — so the task-manager-tailored prompt set at
+ *                    creation is NOT overwritten if the task manager changes
+ *                    later; only initial creation templates it)
  *   - `model` / `modelReasoningEffort` (per-rule Codex overrides)
  *   - `workdir`, `sandbox`, `maxRuns`, `expiresAt`, `notes`
  *

@@ -19,6 +19,7 @@ const customTM: Omit<TaskManagerEntry, 'createdAt' | 'updatedAt'> = {
   requiresToken: true,
   tokenEnvVar: 'LINEAR_API_KEY',
   setupInstructions: 'Set the LINEAR_API_KEY env var on the server.',
+  createTaskInstructions: 'Call mcp:linear/create_issue with team and title.',
   isBuiltin: false,
 };
 
@@ -36,6 +37,14 @@ describe('TaskManagersRepository — seeding', () => {
     expect(of?.requiresToken).toBe(false);
     expect(of?.tokenEnvVar).toBeNull();
   });
+
+  it('seeds omnifocus with createTaskInstructions naming the add_omnifocus_task tool', () => {
+    const repo = new TaskManagersRepository(db);
+    const of = repo.get('omnifocus');
+    expect(of?.createTaskInstructions).not.toBeNull();
+    expect(of?.createTaskInstructions).toContain('add_omnifocus_task');
+    expect(of?.createTaskInstructions).toContain('{{parentTaskId}}');
+  });
 });
 
 describe('TaskManagersRepository — CRUD', () => {
@@ -46,6 +55,13 @@ describe('TaskManagersRepository — CRUD', () => {
     expect(got?.label).toBe('Linear');
     expect(got?.requiresToken).toBe(true);
     expect(got?.tokenEnvVar).toBe('LINEAR_API_KEY');
+    expect(got?.createTaskInstructions).toBe('Call mcp:linear/create_issue with team and title.');
+  });
+
+  it('round-trips a null createTaskInstructions', () => {
+    const repo = new TaskManagersRepository(db);
+    repo.create({ ...customTM, id: 'plain', createTaskInstructions: null });
+    expect(repo.get('plain')?.createTaskInstructions).toBeNull();
   });
 
   it('lists builtin task managers first', () => {

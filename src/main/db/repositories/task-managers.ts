@@ -18,6 +18,7 @@ interface TaskManagerRow {
   requires_token: number;
   token_env_var: string | null;
   setup_instructions: string;
+  create_task_instructions: string | null;
   is_builtin: number;
   created_at: string;
   updated_at: string;
@@ -32,6 +33,7 @@ export function rowToTaskManagerEntry(row: TaskManagerRow): TaskManagerEntry {
     requiresToken: row.requires_token === 1,
     tokenEnvVar: row.token_env_var,
     setupInstructions: row.setup_instructions,
+    createTaskInstructions: row.create_task_instructions,
     isBuiltin: row.is_builtin === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -46,7 +48,7 @@ export class TaskManagersRepository {
     const rows = this.db
       .prepare(
         `SELECT id, label, description, mcp_server_name, requires_token, token_env_var,
-                setup_instructions, is_builtin, created_at, updated_at
+                setup_instructions, create_task_instructions, is_builtin, created_at, updated_at
          FROM task_managers ORDER BY is_builtin DESC, label ASC`,
       )
       .all() as unknown as TaskManagerRow[];
@@ -58,7 +60,7 @@ export class TaskManagersRepository {
     const row = this.db
       .prepare(
         `SELECT id, label, description, mcp_server_name, requires_token, token_env_var,
-                setup_instructions, is_builtin, created_at, updated_at
+                setup_instructions, create_task_instructions, is_builtin, created_at, updated_at
          FROM task_managers WHERE id = ?`,
       )
       .get(id) as TaskManagerRow | undefined;
@@ -71,8 +73,9 @@ export class TaskManagersRepository {
     this.db
       .prepare(
         `INSERT INTO task_managers (id, label, description, mcp_server_name, requires_token,
-                                    token_env_var, setup_instructions, is_builtin)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                                    token_env_var, setup_instructions, create_task_instructions,
+                                    is_builtin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         parsed.id,
@@ -82,6 +85,7 @@ export class TaskManagersRepository {
         parsed.requiresToken ? 1 : 0,
         parsed.tokenEnvVar ?? null,
         parsed.setupInstructions,
+        parsed.createTaskInstructions ?? null,
         parsed.isBuiltin ? 1 : 0,
       );
   }
@@ -93,8 +97,8 @@ export class TaskManagersRepository {
       .prepare(
         `UPDATE task_managers SET
             label = ?, description = ?, mcp_server_name = ?, requires_token = ?,
-            token_env_var = ?, setup_instructions = ?, is_builtin = ?,
-            updated_at = datetime('now')
+            token_env_var = ?, setup_instructions = ?, create_task_instructions = ?,
+            is_builtin = ?, updated_at = datetime('now')
          WHERE id = ?`,
       )
       .run(
@@ -104,6 +108,7 @@ export class TaskManagersRepository {
         parsed.requiresToken ? 1 : 0,
         parsed.tokenEnvVar ?? null,
         parsed.setupInstructions,
+        parsed.createTaskInstructions ?? null,
         parsed.isBuiltin ? 1 : 0,
         parsed.id,
       );

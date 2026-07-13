@@ -179,6 +179,7 @@ export function AddTaskManagerForm({
   const [requiresToken, setRequiresToken] = React.useState(false);
   const [tokenEnvVar, setTokenEnvVar] = React.useState('');
   const [setupInstructions, setSetupInstructions] = React.useState('');
+  const [createTaskInstructions, setCreateTaskInstructions] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -197,6 +198,7 @@ export function AddTaskManagerForm({
         requiresToken,
         tokenEnvVar: tokenEnvVar || null,
         setupInstructions,
+        createTaskInstructions: createTaskInstructions || null,
         isBuiltin: false,
       });
       await onSaved();
@@ -256,6 +258,23 @@ export function AddTaskManagerForm({
           placeholder="How to set up the task manager connection…"
           rows={3}
         />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="tm-create-task-instructions">Task-creation instructions (optional)</Label>
+        <Textarea
+          id="tm-create-task-instructions"
+          value={createTaskInstructions}
+          onChange={(e) => setCreateTaskInstructions(e.target.value)}
+          placeholder={
+            "e.g. Call mcp:omnifocus/add_omnifocus_task with parentTaskId={{parentTaskId}} and name='Review: {{parentTaskName}}'."
+          }
+          rows={3}
+        />
+        <p className="text-xs text-muted-foreground">
+          Tells the review-rule prompt which MCP tool to call. You can use{' '}
+          {'{{parentTaskId}}'} / {'{{parentTaskName}}'} placeholders. Leave blank for a generic
+          prompt.
+        </p>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button disabled={busy} onClick={() => void submit()}>

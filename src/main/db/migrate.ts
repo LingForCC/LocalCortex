@@ -21,6 +21,7 @@ import ruleModelOverridesSql from './migrations/005_rule_model_overrides.sql?raw
 import handoffProfilesSql from './migrations/006_handoff_profiles.sql?raw';
 import handoffProfilesRenameSql from './migrations/007_handoff_profiles_rename.sql?raw';
 import claudeCodeAgentSql from './migrations/008_claude_code_agent.sql?raw';
+import taskManagerCreateInstructionsSql from './migrations/009_task_manager_create_instructions.sql?raw';
 
 /** A single migration: a version number + the SQL to apply. */
 interface Migration {
@@ -42,6 +43,7 @@ const MIGRATIONS: Migration[] = [
   { version: 6, sql: handoffProfilesSql },
   { version: 7, sql: handoffProfilesRenameSql },
   { version: 8, sql: claudeCodeAgentSql },
+  { version: 9, sql: taskManagerCreateInstructionsSql },
 ];
 
 /** Result of running migrations. */

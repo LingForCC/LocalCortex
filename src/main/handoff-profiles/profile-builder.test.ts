@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildHandoffProfileRule,
   applyProfileFieldsToRule,
+  buildDefaultHandoffRuleText,
   HANDOFF_RULE_NAME,
-  DEFAULT_HANDOFF_RULE_TEXT,
+  FALLBACK_CREATE_TASK_INSTRUCTIONS,
 } from './profile-builder.js';
 import { RuleSchema } from '@shared/schemas/rule-schema';
 import type { AgentEntry, TaskManagerEntry, Rule } from '@shared/types';
@@ -33,6 +34,7 @@ function makeTaskManager(overrides: Partial<TaskManagerEntry> = {}): TaskManager
     requiresToken: false,
     tokenEnvVar: null,
     setupInstructions: 'Build the MCP server.',
+    createTaskInstructions: null,
     isBuiltin: true,
     createdAt: '2026-07-10T00:00:00Z',
     updatedAt: '2026-07-10T00:00:00Z',
@@ -92,9 +94,26 @@ describe('buildHandoffProfileRule', () => {
     expect(rule.sandbox).toBe('read-only');
   });
 
-  it('uses the default review-subtask prompt text', () => {
+  it('uses the fallback prompt when the task manager has no createTaskInstructions', () => {
     const rule = buildHandoffProfileRule(makeAgent(), makeTaskManager(), 'claude', { id: 'r1' });
-    expect(rule.rule).toBe(DEFAULT_HANDOFF_RULE_TEXT);
+    expect(rule.rule).toBe(buildDefaultHandoffRuleText(makeTaskManager()));
+    expect(rule.rule).toContain(FALLBACK_CREATE_TASK_INSTRUCTIONS);
+    expect(rule.rule).toContain('{{parentTaskId}}');
+  });
+
+  it('tailors the prompt to the task manager createTaskInstructions when present', () => {
+    const instructions = 'Call mcp:omnifocus/add_omnifocus_task with parentTaskId={{parentTaskId}}.';
+    const tm = makeTaskManager({ createTaskInstructions: instructions });
+    const rule = buildHandoffProfileRule(makeAgent(), tm, 'claude', { id: 'r1' });
+    expect(rule.rule).toContain('mcp:omnifocus/add_omnifocus_task');
+    expect(rule.rule).toContain('{{parentTaskId}}');
+    expect(rule.rule).not.toContain(FALLBACK_CREATE_TASK_INSTRUCTIONS);
+  });
+
+  it('falls back when createTaskInstructions is whitespace only', () => {
+    const tm = makeTaskManager({ createTaskInstructions: '   \n  ' });
+    const rule = buildHandoffProfileRule(makeAgent(), tm, 'claude', { id: 'r1' });
+    expect(rule.rule).toContain(FALLBACK_CREATE_TASK_INSTRUCTIONS);
   });
 
   it('is enabled by default', () => {

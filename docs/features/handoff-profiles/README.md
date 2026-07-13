@@ -82,7 +82,10 @@ When you save a new profile, `handoff-profiles:create` atomically:
    - `mcpServers: [<task manager>.mcpServerName]`
    - `sandbox: 'read-only'`
    - A default review-subtask prompt that renders `{{parentTaskId}}` from the
-     handoff context.
+     handoff context. When the task manager has **task-creation instructions**
+     (see below), they are interpolated into the prompt so the agent knows the
+     exact MCP tool to call (e.g. `mcp:omnifocus/add_omnifocus_task`); otherwise
+     the prompt falls back to a generic "use the available MCP server" line.
 3. **Inserts** the rule, then the profile row (which references the rule via
    `rule_id`).
 4. **Broadcasts** `rules:changed` so the scheduler refreshes.
@@ -169,6 +172,25 @@ CRUD-able in-app (the profile editor's "+ Add custom…" buttons). This is the
 
 The task manager is immediately selectable. The run-loop resolves its MCP server
 from the same `mcp_servers` table at run time.
+
+#### Task-creation instructions (optional)
+
+The "Add custom…" (and edit) form has an optional **Task-creation instructions**
+field — free-text telling the auto-created review-rule prompt *which MCP tool to
+call and with what parameters*. It may contain `{{parentTaskId}}` /
+`{{parentTaskName}}` placeholders (rendered from the handoff context at run
+time). Example for a Todoist server:
+
+```
+Call mcp:todoist/create_task with content='Review: {{parentTaskName}}'
+and project_id fetched from the parent task {{parentTaskId}}.
+```
+
+When filled, this text replaces the generic "using the available MCP
+task-manager server" line in the default prompt, so the agent doesn't have to
+guess the tool name from the attached server list. The builtin OmniFocus entry
+ships pre-filled with `mcp:omnifocus/add_omnifocus_task`. Leave it blank to keep
+the generic prompt.
 
 ### Adding a coding agent (no code change)
 

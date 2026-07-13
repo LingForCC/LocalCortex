@@ -24,6 +24,15 @@ export const TaskManagerSchema = z.object({
   tokenEnvVar: z.string().trim().min(1).nullable(),
   /** Markdown/plain-text instructions shown in onboarding. */
   setupInstructions: z.string().trim().min(1),
+  /**
+   * Optional natural-language instructions for how the agent should create a
+   * task with this manager's MCP server (tool name + params). Interpolated into
+   * the handoff profile's default review-subtask prompt so the agent knows the
+   * exact tool to call. May itself contain {{parentTaskId}} / {{parentTaskName}}
+   * placeholders (rendered at run time). Null/empty falls back to a generic
+   * "use the available MCP server" instruction.
+   */
+  createTaskInstructions: z.string().trim().nullable().default(null),
   /** Seeded defaults are editable but not deletable. */
   isBuiltin: z.boolean().default(false),
   createdAt: z.string(),
