@@ -22,6 +22,7 @@ import { Input } from '@renderer/components/ui/input';
 import { Label } from '@renderer/components/ui/label';
 import { Switch } from '@renderer/components/ui/switch';
 import type { HandoffPromptPayload } from '@shared/schemas/ipc-schema';
+import { extractOmniFocusTaskId } from '@renderer/lib/task-id';
 
 /** A mutable context row in the attach form. */
 interface ContextRow {
@@ -133,6 +134,14 @@ function NewSessionForm({ payload }: { payload: HandoffPromptPayload }) {
                   placeholder="value"
                   value={row.value}
                   onChange={(e) => updateRow(idx, { value: e.target.value })}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData('text');
+                    const extracted = extractOmniFocusTaskId(text);
+                    if (extracted !== text) {
+                      e.preventDefault();
+                      updateRow(idx, { value: extracted });
+                    }
+                  }}
                 />
                 <Button
                   variant="ghost"

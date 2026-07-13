@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@renderer/components/ui/table';
 import { useHandoffsStore } from '@renderer/store/handoffs';
+import { extractOmniFocusTaskId } from '@renderer/lib/task-id';
 
 /** A mutable context row in the registration form. */
 interface ContextRow {
@@ -149,6 +150,14 @@ export function Handoffs() {
                     placeholder="value"
                     value={row.value}
                     onChange={(e) => updateRow(idx, { value: e.target.value })}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text');
+                      const extracted = extractOmniFocusTaskId(text);
+                      if (extracted !== text) {
+                        e.preventDefault();
+                        updateRow(idx, { value: extracted });
+                      }
+                    }}
                   />
                   <Button
                     variant="ghost"
