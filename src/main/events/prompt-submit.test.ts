@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   isPromptSubmitEvent,
+  collectPromptSubmitEventTypes,
   decideHandoffPromptMode,
   readSessionId,
   buildPromptSubmitPrompt,
   type PromptSubmitHandoffLookup,
+  type PromptSubmitProfileLike,
+  type PromptSubmitAgentLike,
 } from './prompt-submit.js';
 import { CODEX_PROMPT_SUBMIT_EVENT, ZCODE_PROMPT_SUBMIT_EVENT } from '@shared/constants';
 import type { Handoff } from '@shared/types';
@@ -32,16 +35,92 @@ function makeHandoff(overrides: Partial<Handoff> = {}): Handoff {
 }
 
 describe('isPromptSubmitEvent', () => {
-  it('true for the two known prompt-submit event types', () => {
-    expect(isPromptSubmitEvent(ZCODE_PROMPT_SUBMIT_EVENT)).toBe(true);
-    expect(isPromptSubmitEvent(CODEX_PROMPT_SUBMIT_EVENT)).toBe(true);
+  // The gate is now membership-driven: nothing is hard-coded, so even the
+  // builtin types only pass when present in the allowed set.
+  it('true when the type is a member of the allowed set', () => {
+    const allowed = new Set([ZCODE_PROMPT_SUBMIT_EVENT, CODEX_PROMPT_SUBMIT_EVENT]);
+    expect(isPromptSubmitEvent(ZCODE_PROMPT_SUBMIT_EVENT, allowed)).toBe(true);
+    expect(isPromptSubmitEvent(CODEX_PROMPT_SUBMIT_EVENT, allowed)).toBe(true);
   });
 
-  it('false for completion events and arbitrary types', () => {
-    expect(isPromptSubmitEvent('zcode.session-complete')).toBe(false);
-    expect(isPromptSubmitEvent('codex.session-complete')).toBe(false);
-    expect(isPromptSubmitEvent('build.failed')).toBe(false);
-    expect(isPromptSubmitEvent('')).toBe(false);
+  it('false when the type is not in the allowed set', () => {
+    const allowed = new Set([ZCODE_PROMPT_SUBMIT_EVENT]);
+    expect(isPromptSubmitEvent(CODEX_PROMPT_SUBMIT_EVENT, allowed)).toBe(false);
+    expect(isPromptSubmitEvent('foobar.prompt-submit', allowed)).toBe(false);
+    expect(isPromptSubmitEvent('zcode.session-complete', allowed)).toBe(false);
+    expect(isPromptSubmitEvent('', allowed)).toBe(false);
+  });
+
+  it('the builtin types are NOT recognized when the allowed set is empty', () => {
+    const allowed = new Set<string>();
+    expect(isPromptSubmitEvent(ZCODE_PROMPT_SUBMIT_EVENT, allowed)).toBe(false);
+    expect(isPromptSubmitEvent(CODEX_PROMPT_SUBMIT_EVENT, allowed)).toBe(false);
+  });
+});
+
+describe('collectPromptSubmitEventTypes', () => {
+  /** Build an agent fixture. */
+  function makeAgent(overrides: Partial<PromptSubmitAgentLike> = {}): PromptSubmitAgentLike {
+    return { id: 'zcode', promptSubmitEventType: 'zcode.prompt-submit', ...overrides };
+  }
+
+  /** Build a profile fixture (enabled by default). */
+  function makeProfile(overrides: Partial<PromptSubmitProfileLike> = {}): PromptSubmitProfileLike {
+    return { agentId: 'zcode', enabled: true, ...overrides };
+  }
+
+  it('includes the agent promptSubmitEventType for an enabled profile', () => {
+    const types = collectPromptSubmitEventTypes(
+      [makeProfile({ agentId: 'zcode' })],
+      [makeAgent({ id: 'zcode', promptSubmitEventType: 'zcode.prompt-submit' })],
+    );
+    expect(types).toEqual(new Set(['zcode.prompt-submit']));
+  });
+
+  it('excludes the event type when the profile is DISABLED', () => {
+    const types = collectPromptSubmitEventTypes(
+      [makeProfile({ agentId: 'zcode', enabled: false })],
+      [makeAgent({ id: 'zcode' })],
+    );
+    expect(types).toEqual(new Set());
+  });
+
+  it('skips a profile whose agentId has no matching agent row (no throw)', () => {
+    const types = collectPromptSubmitEventTypes(
+      [makeProfile({ agentId: 'ghost' })],
+      [makeAgent({ id: 'zcode' })],
+    );
+    expect(types).toEqual(new Set());
+  });
+
+  it('collects event types across multiple profiles for different agents', () => {
+    const types = collectPromptSubmitEventTypes(
+      [
+        makeProfile({ agentId: 'zcode' }),
+        makeProfile({ agentId: 'codex' }),
+      ],
+      [
+        makeAgent({ id: 'zcode', promptSubmitEventType: 'zcode.prompt-submit' }),
+        makeAgent({ id: 'codex', promptSubmitEventType: 'codex.prompt-submit' }),
+      ],
+    );
+    expect(types).toEqual(new Set(['zcode.prompt-submit', 'codex.prompt-submit']));
+  });
+
+  it('dedupes when multiple enabled profiles reference the same agent', () => {
+    const types = collectPromptSubmitEventTypes(
+      [
+        makeProfile({ agentId: 'zcode' }),
+        makeProfile({ agentId: 'zcode' }),
+      ],
+      [makeAgent({ id: 'zcode', promptSubmitEventType: 'zcode.prompt-submit' })],
+    );
+    expect(types).toEqual(new Set(['zcode.prompt-submit']));
+  });
+
+  it('returns an empty set when there are no profiles', () => {
+    const types = collectPromptSubmitEventTypes([], [makeAgent()]);
+    expect(types).toEqual(new Set());
   });
 });
 

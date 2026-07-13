@@ -329,16 +329,23 @@ The ingress:
 
 #### Prompt-submit events (popup + optional rules)
 
-`*.prompt-submit` event types (`zcode.prompt-submit`, `codex.prompt-submit`) are
-**not** popup-only — they flow through the full pipeline like any other event:
+`<source>.prompt-submit` event types (e.g. `zcode.prompt-submit`,
+`codex.prompt-submit`) are **not** popup-only — they flow through the full
+pipeline like any other event:
 
 1. The `onEvent` observer fires the **handoff-attach popup** via
-   `buildPromptSubmitPrompt` (`src/main/events/prompt-submit.ts`), regardless of
-   rule matches. The popup is a separate `BrowserWindow` loaded with
-   `?view=handoff-prompt`.
-2. The normal match/enqueue path then runs: any rule whose `eventType` equals
-   the prompt-submit type matches and runs, and **handoff enrichment applies to
-   those runs** just as it does for `session-complete`.
+   `buildPromptSubmitPrompt` (`src/main/events/prompt-submit.ts`), but **only
+   when the event's type is the `promptSubmitEventType` of an agent referenced
+   by an enabled handoff profile**. The allowed set is rebuilt per event by
+   `collectPromptSubmitEventTypes` from the agents catalog + handoff profiles
+   (`src/main/events/prompt-submit.ts`), so a newly created/enabled profile
+   takes effect without restart. Events whose agent has no enabled profile are
+   ignored by the observer (no popup). The popup is a separate `BrowserWindow`
+   loaded with `?view=handoff-prompt`.
+2. The normal match/enqueue path then runs **regardless of the popup gate**:
+   any rule whose `eventType` equals the prompt-submit type matches and runs,
+   and **handoff enrichment applies to those runs** just as it does for
+   `session-complete`.
 
 So the popup and rule runs are independent and composable. The practical
 catch — a handoff attached *from the popup during this same event* is created

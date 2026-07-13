@@ -10,7 +10,7 @@ Covers **schema validation**, **repository persistence**, **the enrichment seam*
 - Persistence: create / list / get / delete + `findEnabledBySessionId` / `findBySessionId` / `setEnabled` in the `pending_reviews` table.
 - The pure enrichment seam: `enrichEventForSession` + `mergeEnrichment` (unknown / enabled / disabled; fire-on-every-match; copy semantics).
 - The composition orchestrator `prepareHandoffEnrichment` — the inline Electron wiring in `index.ts`'s `onMatched`, factored out so it's testable. It composes lookup → merge → return (no post-run marking — an enabled handoff fires every match).
-- **Prompt-submit popup decision logic** (`prompt-submit.ts`): new-vs-existing mode selection, sessionId reading, prompt payload construction.
+- **Prompt-submit popup decision logic** (`prompt-submit.ts`): new-vs-existing mode selection, sessionId reading, prompt payload construction, and the catalog-driven gate (popup opens only when the event type is the `promptSubmitEventType` of an agent referenced by an enabled handoff profile).
 - **Ingress `onEvent` observer** (`ingress.ts`): fires for every accepted event independent of rule matches; isolated from the match/enqueue path. Includes the regression guard that a prompt-submit event matching a rule runs BOTH the popup observer and the rule.
 - **IPC handlers** (`ipc/handoffs.ts`): CRUD channels + the `onChanged` broadcast that refreshes the main panel when a handoff changes from the popup window.
 - Renderer UI: Handoffs panel registration form + list table with an enable/disable Switch per row; prompt-submit popup (`HandoffPrompt.tsx`).
@@ -112,16 +112,25 @@ The inline `onMatched` wiring in `index.ts` composes two things: (1) look up the
 ## Prompt-submit popup decision logic — `prompt-submit.ts`
 
 Pure, Electron-free decision helpers for the prompt-submit popup (which mode to
-show, building the prompt payload). Factored out of `index.ts` so they're
-unit-testable. `buildPromptSubmitPrompt` uses `findBySessionId` (enabled OR
-disabled), distinct from the completion-time `findEnabledBySessionId`.
+show, building the prompt payload, and whether the popup should open at all).
+Factored out of `index.ts` so they're unit-testable. `buildPromptSubmitPrompt`
+uses `findBySessionId` (enabled OR disabled), distinct from the completion-time
+`findEnabledBySessionId`.
 
-**Status:** ✅ covered — `src/main/events/prompt-submit.test.ts` (12 cases).
+**The popup gate is catalog-driven, not hard-coded.** The popup opens only when
+the event's `type` is a member of the allowed set built by
+`collectPromptSubmitEventTypes` — the `promptSubmitEventType` values of agents
+referenced by **enabled** handoff profiles. An event from an agent with no
+enabled profile is ignored by the popup (it can still drive rule runs /
+enrichment independently).
+
+**Status:** ✅ covered — `src/main/events/prompt-submit.test.ts` (20 cases).
 
 | # | Case | Expected |
 | --- | --- | --- |
-| H-SS1 | isPromptSubmitEvent true for `zcode.prompt-submit` + `codex.prompt-submit` | ✅ new |
-| H-SS2 | isPromptSubmitEvent false for completion + arbitrary types | ✅ new |
+| H-SS1 | isPromptSubmitEvent true when the type is in the allowed set | ✅ updated |
+| H-SS2 | isPromptSubmitEvent false when the type is not in the allowed set | ✅ updated |
+| H-SS2b | isPromptSubmitEvent false for the builtin types when the allowed set is empty (nothing hard-coded) | ✅ new |
 | H-SS3 | readSessionId reads a string | ✅ new |
 | H-SS4 | readSessionId undefined for missing/non-string | ✅ new |
 | H-SS5 | decideHandoffPromptMode null → 'new' | ✅ new |
@@ -133,6 +142,12 @@ disabled), distinct from the completion-time `findEnabledBySessionId`.
 | H-SS10b | buildPromptSubmitPrompt existing mode (ENABLED handoff — resume+enrichment case) | ✅ new |
 | H-SS11 | source derived from event type when top-level source absent | ✅ new |
 | H-SS12 | explicit top-level source used when provided | ✅ new |
+| H-SS13 | collectPromptSubmitEventTypes: enabled profile → its agent's event type included | ✅ new |
+| H-SS14 | collectPromptSubmitEventTypes: DISABLED profile → excluded | ✅ new |
+| H-SS15 | collectPromptSubmitEventTypes: profile with no matching agent row → skipped (no throw) | ✅ new |
+| H-SS16 | collectPromptSubmitEventTypes: multiple profiles for different agents → all event types collected | ✅ new |
+| H-SS17 | collectPromptSubmitEventTypes: two profiles for the same agent → deduped to one entry | ✅ new |
+| H-SS18 | collectPromptSubmitEventTypes: no profiles → empty set | ✅ new |
 
 ---
 
@@ -142,6 +157,14 @@ The `onEvent` observer fires for **every** accepted event, before rule matching
 and independent of whether any rule matched. It powers the prompt-submit popup.
 Isolated in a try/catch inside the ingress so an observer failure never blocks
 the match/enqueue path or the HTTP reply.
+
+> **Gate note.** The ingress itself is agent-agnostic — it just calls `onEvent`
+> for every accepted event. The *popup* gate (only open for agents backed by an
+> enabled handoff profile) lives in the production `onEvent` wiring in
+> `index.ts`, which calls `collectPromptSubmitEventTypes` + `isPromptSubmitEvent`
+> before opening the window. The ingress unit tests below mock `onEvent`, so they
+> assert observer firing semantics, not the popup gate — that is covered by the
+> H-SS13–H-SS18 cases above.
 
 **Status:** ✅ covered — `src/main/events/ingress.test.ts` (5 cases).
 
@@ -185,6 +208,11 @@ window. Mocks `electron`'s `ipcMain` via `vi.mock` to capture handlers.
 
 **Status:** ✅ covered — `playwright/handoffs.spec.ts` (H-E2E1–H-E2E5) + `playwright/handoff-prompt.spec.ts` (H-E2E6–H-E2E9) on the shared isolation fixture.
 
+> **Popup precondition.** The prompt-submit popup only opens when an enabled
+> handoff profile references the event's agent. Each H-E2E6–H-E2E9 test calls
+> `app.completeOnboarding()` to create an enabled ZCode profile first, putting
+> `zcode.prompt-submit` in the allowed set.
+
 | # | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | H-E2E1 | Register a handoff via the UI | Handoffs tab → fill session id + a context row → Register | Row appears in the table, enabled toggle on |
@@ -192,10 +220,10 @@ window. Mocks `electron`'s `ipcMain` via `vi.mock` to capture handlers.
 | H-E2E3 | Toggle enable/disable | Click the Switch on a row | `enabled` flips; persists across reload |
 | H-E2E4 | Delete a handoff | Delete button on a row | Row removed |
 | H-E2E5 | Validation feedback | Submit with empty session id | Inline error shown; nothing saved |
-| H-E2E6 | Prompt-submit popup (new session) | POST a `zcode.prompt-submit` event for an unknown sessionId | Popup window opens with the attach form, sessionId pre-filled |
-| H-E2E7 | Prompt-submit popup (existing session) | Attach a handoff, then re-POST `zcode.prompt-submit` for the same sessionId | Popup opens with the enable/disable toggle (mode 'existing') |
-| H-E2E8 | Popup → main panel sync | Attach a handoff from the popup; the main window's Handoffs panel should show it without manual reload | Row appears in main panel (driven by `handoffs:changed` broadcast) |
-| H-E2E9 | One popup per session | With the popup open for a session, POST a second `prompt-submit` for the same sessionId | Existing popup re-focuses; no second window opens |
+| H-E2E6 | Prompt-submit popup (new session) | Create an enabled ZCode profile; POST a `zcode.prompt-submit` event for an unknown sessionId | Popup window opens with the attach form, sessionId pre-filled |
+| H-E2E7 | Prompt-submit popup (existing session) | Create an enabled ZCode profile; attach a handoff, then re-POST `zcode.prompt-submit` for the same sessionId | Popup opens with the enable/disable toggle (mode 'existing') |
+| H-E2E8 | Popup → main panel sync | Create an enabled ZCode profile; attach a handoff from the popup; the main window's Handoffs panel should show it without manual reload | Row appears in main panel (driven by `handoffs:changed` broadcast) |
+| H-E2E9 | One popup per session | Create an enabled ZCode profile; with the popup open for a session, POST a second `prompt-submit` for the same sessionId | Existing popup re-focuses; no second window opens |
 
 ---
 
@@ -204,14 +232,20 @@ window. Mocks `electron`'s `ipcMain` via `vi.mock` to capture handlers.
 Run after any change to the enrichment seam, the hook, the prompt-submit popup,
 or the fulfilling rule.
 
+> **Popup precondition.** Steps 6–9 assume at least one **enabled** handoff
+> profile references the agent whose `prompt-submit` event you POST (e.g. an
+> enabled ZCode profile for `zcode.prompt-submit`). Without such a profile the
+> popup will **not** open — that is the intended catalog-driven gate, not a bug.
+
 1. **Hook → enrichment → run (happy path).** Register an enabled handoff for a real ZCode session id with `parentTaskId=<some OmniFocus task>`. Complete the ZCode session (or a round). Confirm: a run appears in Run history (trigger `event`) and the rule's prompt rendered `{{parentTaskId}}`.
 2. **Fires each round.** With the handoff still enabled, trigger a second `Stop` for the same session (or re-POST the event). Confirm a second run fires — the handoff stays enabled and enriches every match.
 3. **Disable stops firing.** Toggle the handoff off in the panel; re-POST the event. Confirm no run fires for the handoff (the rule may still run if it matches the event type, but no context is injected). Re-enable; confirm it fires again.
 4. **No handoff registered.** Complete a session with no enabled handoff. Confirm the rule still runs (if it matches the event type) but no context is injected.
 5. **Multiple managers.** With both an OmniFocus-rule and a Todoist-rule matching `zcode.session-complete`, complete a session for a handoff whose `context.taskManager=omnifocus`. Confirm both runs fire (they receive the same context); only you can decide whether that's desired — use `trigger.filter` on `taskManager` to scope a rule to one manager.
-6. **Prompt-submit popup — new session.** Start a new ZCode/Codex session (or POST a `*.prompt-submit` event with a fresh sessionId). Confirm the popup opens with the attach form; fill context and attach. Confirm the handoff appears in the main Handoffs panel.
-7. **Prompt-submit popup — resume.** With a handoff attached for a session, start that session again (or re-POST the `*.prompt-submit` event). Confirm the popup opens in existing-session mode with the enable/disable toggle reflecting current state.
+6. **Prompt-submit popup — new session.** With an enabled profile for the agent, start a new ZCode/Codex session (or POST a `<source>.prompt-submit` event with a fresh sessionId). Confirm the popup opens with the attach form; fill context and attach. Confirm the handoff appears in the main Handoffs panel.
+7. **Prompt-submit popup — resume.** With a handoff attached for a session, start that session again (or re-POST the `<source>.prompt-submit` event). Confirm the popup opens in existing-session mode with the enable/disable toggle reflecting current state.
 8. **Prompt-submit + rule (both paths).** Author a rule on `eventType: zcode.prompt-submit` (e.g. a logging rule). Attach an enabled handoff for a session, then re-POST `zcode.prompt-submit` for it. Confirm: the popup opens (existing mode) **and** the rule runs **and** its run sees the enriched `{{parentTaskId}}` (resume case). Then POST `zcode.prompt-submit` for a brand-new session (no handoff): the popup opens (new mode) and the rule runs, but without context (nothing pre-existed to enrich).
+9. **Popup gate — no enabled profile.** Disable (or delete) every handoff profile referencing the agent, then POST a `<source>.prompt-submit` event. Confirm the popup does **not** open. (The event still flows through match/enqueue, so a rule whose `eventType` matches still runs — verify independently if desired.) Re-enable a profile and re-POST; confirm the popup opens again.
 
 ---
 

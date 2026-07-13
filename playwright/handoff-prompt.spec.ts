@@ -4,12 +4,19 @@
  *
  * The popup is a separate Electron BrowserWindow (loaded via
  * `?view=handoff-prompt`) that opens when the ingress receives a
- * `*.prompt-submit` event carrying a `payload.sessionId`. There is no in-app
- * button that opens it — it is driven entirely by POSTing an event to the
- * loopback ingress.
+ * `<source>.prompt-submit` event carrying a `payload.sessionId` — but ONLY when
+ * an enabled handoff profile references that event's agent (the catalog-driven
+ * gate in `collectPromptSubmitEventTypes` / `isPromptSubmitEvent`). There is no
+ * in-app button that opens it — it is driven entirely by POSTing an event to
+ * the loopback ingress.
  *
- * Flow: HTTP POST /event → ingress `onEvent` observer → buildPromptSubmitPrompt
- * → openHandoffPopup (one window per sessionId; re-focus on repeat). The popup
+ * Each test therefore calls `app.completeOnboarding()` first to create an
+ * enabled ZCode profile, which puts `zcode.prompt-submit` in the allowed set.
+ * Without that setup the popup would not open (the gate's intended behavior).
+ *
+ * Flow: HTTP POST /event → ingress `onEvent` observer → collectPromptSubmit
+ * EventTypes + isPromptSubmitEvent gate → buildPromptSubmitPrompt →
+ * openHandoffPopup (one window per sessionId; re-focus on repeat). The popup
  * loads HandoffPrompt.tsx, which branches on `payload.mode` ('new' attach form
  * vs 'existing' enable/disable toggle).
  *
@@ -80,6 +87,8 @@ async function createHandoffViaApi(
 
 test.describe('Prompt-submit handoff popup', () => {
   test('H-E2E6: popup opens for a new (unknown) session', async ({ app }) => {
+    // The popup gate requires an enabled profile referencing the zcode agent.
+    await app.completeOnboarding();
     // Start listening before the event fires the popup.
     const popupPromise = waitForPopup(app);
     await postPromptSubmit('sess_new');
@@ -97,6 +106,8 @@ test.describe('Prompt-submit handoff popup', () => {
 
   test('H-E2E7: popup opens in existing-session mode for a known session', async ({ app }) => {
     const { window } = app;
+    // The popup gate requires an enabled profile referencing the zcode agent.
+    await app.completeOnboarding();
     // Seed a handoff so findBySessionId matches (enabled OR disabled).
     await createHandoffViaApi(window, 'sess_existing', 'tsk1');
 
@@ -111,6 +122,8 @@ test.describe('Prompt-submit handoff popup', () => {
 
   test('H-E2E8: attaching from the popup syncs to the main Handoffs panel', async ({ app }) => {
     const { window } = app;
+    // The popup gate requires an enabled profile referencing the zcode agent.
+    await app.completeOnboarding();
     // The main panel must be on the Handoffs tab for its `onChanged`
     // subscription (Handoffs.tsx:63-66) to be mounted.
     await window.getByRole('button', { name: 'Handoffs', exact: true }).click();
@@ -133,6 +146,8 @@ test.describe('Prompt-submit handoff popup', () => {
   test('H-E2E9: one popup per session — repeat event re-focuses, no second window', async ({
     app,
   }) => {
+    // The popup gate requires an enabled profile referencing the zcode agent.
+    await app.completeOnboarding();
     const popupPromise = waitForPopup(app);
     await postPromptSubmit('sess_once');
     await popupPromise;

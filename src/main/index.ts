@@ -27,7 +27,11 @@ import { Scheduler } from './scheduler/scheduler.js';
 import { ConcurrencyQueue } from './scheduler/concurrency.js';
 import { startIngress } from './events/ingress.js';
 import { prepareHandoffEnrichment } from './events/handoff-enrichment.js';
-import { buildPromptSubmitPrompt, isPromptSubmitEvent } from './events/prompt-submit.js';
+import {
+  buildPromptSubmitPrompt,
+  collectPromptSubmitEventTypes,
+  isPromptSubmitEvent,
+} from './events/prompt-submit.js';
 import type { HandoffPromptPayload } from '@shared/schemas/ipc-schema';
 import { executeRun, type RunnerProvider } from './agent/run-loop.js';
 import { ClaudeAgentRunner } from './agent/claude.js';
@@ -218,11 +222,18 @@ async function bootstrap(): Promise<void> {
     selfEventWorkdirPrefix: join(appDataRoot, RUNS_SUBDIR, 'work'),
     getRules: () => rulesRepo.list().filter((r) => r.enabled),
     // Side-effect-only observer: opens the handoff-attach popup for prompt-
-    // submit events (regardless of whether any rule matches them). Isolated in
-    // a try/catch inside the ingress so a popup failure never blocks the HTTP
+    // submit events whose type is the promptSubmitEventType of an agent
+    // referenced by an ENABLED handoff profile (independent of whether any rule
+    // matches). The allowed set is rebuilt per event from the catalog + profiles
+    // so a newly created/enabled profile takes effect without restart. Isolated
+    // in a try/catch inside the ingress so a popup failure never blocks the HTTP
     // reply or the match/enqueue path.
     onEvent: (event) => {
-      if (!isPromptSubmitEvent(event.type)) return;
+      const allowed = collectPromptSubmitEventTypes(
+        handoffProfilesRepo.list(),
+        agentsRepo.list(),
+      );
+      if (!isPromptSubmitEvent(event.type, allowed)) return;
       try {
         const payload = buildPromptSubmitPrompt(event, handoffsRepo);
         if (payload) openHandoffPrompt(payload);

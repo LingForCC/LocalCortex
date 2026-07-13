@@ -51,11 +51,13 @@ The rule fires the moment a matching event arrives at the app's **local HTTP ing
 | `eventType` | Required, non-empty. Matched against the event's `type` **exactly** (e.g. `codex.session-complete`, `zcode.prompt-submit`, `build.failed`). Open-ended — whatever a source POSTs. |
 | `filter` | Optional. Glob filters on event-payload fields. v1 supports `*` / `?` globbing on string fields. |
 
-> **`prompt-submit` events are normal event types.** A `*.prompt-submit` event
-> type (`zcode.prompt-submit`, `codex.prompt-submit`) opens the handoff-attach
-> popup via the ingress `onEvent` observer **and** can trigger rules just like
-> any other event type — they are not popup-only. The popup fires regardless of
-> rule matches; rule matches fire regardless of the popup. See
+> **`prompt-submit` events are normal event types.** A `<source>.prompt-submit`
+> event type (e.g. `zcode.prompt-submit`, `codex.prompt-submit`) opens the
+> handoff-attach popup via the ingress `onEvent` observer — but **only if an
+> enabled handoff profile references that event's agent** — **and** can trigger
+> rules just like any other event type; they are not popup-only. Rule matching
+> is independent of the popup gate, so a rule can match a `prompt-submit` event
+> even when no profile backs it (and the popup stays closed). See
 > [Handoffs → Prompt-submit events and rules](../handoffs/README.md#prompt-submit-events-and-rules)
 > for how enrichment interacts with prompt-submit rule runs.
 

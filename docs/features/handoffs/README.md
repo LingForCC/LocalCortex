@@ -29,6 +29,17 @@ When a user submits a prompt, the source's `UserPromptSubmit` hook POSTs a
 window** that asks you what to do, depending on whether a handoff already exists
 for that session:
 
+> **The popup only opens for agents backed by an enabled handoff profile.** The
+> event's `type` must equal the `promptSubmitEventType` of an agent that some
+> **enabled** handoff profile references. A `prompt-submit` event from an agent
+> with no enabled profile is silently ignored by the popup — it does **not**
+> open. (The event still flows through the normal match/enqueue path, so any
+> rule whose `eventType` matches it runs and is enriched as usual.) This keeps
+> the popup tied to active handoff configurations rather than firing on every
+> prompt-submit from every source. See
+> [Handoff profiles](../handoff-profiles/README.md) for how profiles bind to
+> agents.
+
 - **New session** (no handoff row) → the popup offers the **attach form**:
   the session id is pre-filled, and you add context rows (`parentTaskId`,
   `parentTaskName`, …) plus an optional reminder title, then **Attach handoff**.
