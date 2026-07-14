@@ -7,10 +7,15 @@
 # CLI directly and registers under a distinct agent source ("claude-code") so
 # LocalCortex can tell the two apart in event rules.
 #
-# Claude Code's hook system exposes the current session id as the
-# `CLAUDE_SESSION_ID` environment variable (and the `${CLAUDE_SESSION_ID}`
-# template). This script is registered for BOTH the Stop and UserPromptSubmit
-# hooks (see hooks/hooks.json):
+# Claude Code passes session metadata to lifecycle hooks as JSON on stdin,
+# including a "session_id" field. This script reads stdin and extracts
+# "session_id" (falling back to the CLAUDE_SESSION_ID env var, which older
+# Claude Code versions exposed), then POSTs it. No jq dependency — a portable
+# sed/grep extractor is used so this runs anywhere curl does. This mirrors
+# src/main/events/codex-prompt-submit-hook.sh.
+#
+# This script is registered for BOTH the Stop and UserPromptSubmit hooks
+# (see hooks/hooks.json):
 #   - Stop             → posts "claude-code.session-complete" so any event rule
 #                        matching it (e.g. a "create a review subtask" handoff
 #                        rule) reacts.
@@ -46,10 +51,33 @@ SECRET="${LC_SECRET:-}"
 # and the default (Stop hook, no override) emits the completion event.
 EVENT_TYPE="${LC_EVENT_TYPE:-claude-code.session-complete}"
 EVENT_SOURCE="${LC_EVENT_SOURCE:-claude-code}"
-SESSION_ID="${CLAUDE_SESSION_ID:-${LC_SESSION_ID:-}}"
-# The plugin can fire outside any repo (user scope), so prefer the actual
-# current working directory over CLAUDE_PROJECT_DIR (only set inside a project).
-WORKDIR="${LC_WORKDIR:-${CLAUDE_PROJECT_DIR:-${PWD:-}}}"
+
+# Claude Code passes session metadata as JSON on stdin (including "session_id"
+# and "cwd"). Read it (non-blocking: some hook sources may not pipe anything);
+# if absent or unparseable, fall back to the CLAUDE_SESSION_ID env var older
+# Claude Code versions exposed, then LC_SESSION_ID.
+STDIN_JSON=""
+if [[ ! -t 0 ]]; then
+  STDIN_JSON="$(cat || true)"
+fi
+
+# Extract "session_id" from the stdin JSON without jq. Matches the first
+# "session_id": "value" occurrence; tolerates surrounding whitespace.
+SESSION_ID_FROM_STDIN="$(printf '%s' "${STDIN_JSON}" \
+  | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  | head -n1 || true)"
+
+SESSION_ID="${SESSION_ID_FROM_STDIN:-${CLAUDE_SESSION_ID:-${LC_SESSION_ID:-}}}"
+
+# Prefer the cwd field from the stdin JSON (Claude Code reports it reliably),
+# then CLAUDE_PROJECT_DIR (only set inside a project), then $PWD. The plugin
+# can fire outside any repo (user scope), so the actual working directory is a
+# better default than CLAUDE_PROJECT_DIR alone.
+CWD_FROM_STDIN="$(printf '%s' "${STDIN_JSON}" \
+  | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  | head -n1 || true)"
+
+WORKDIR="${LC_WORKDIR:-${CWD_FROM_STDIN:-${CLAUDE_PROJECT_DIR:-${PWD:-}}}}"
 SUMMARY="${LC_SUMMARY:-}"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
