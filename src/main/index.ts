@@ -13,6 +13,12 @@
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+// Restores the user's login-shell PATH so the packaged app can resolve CLIs
+// (codex/claude) that live in shell-configured dirs (e.g. /opt/homebrew/bin,
+// ~/.local/bin). GUI-launched apps on macOS inherit a minimal system PATH that
+// omits those; in dev `npm start` inherits the terminal PATH so this is a no-op
+// there. Lazy-imported so pure modules that import this file stay unit-testable.
+import fixPath from 'fix-path';
 import { openDatabase } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { RulesRepository } from './db/repositories/rules.js';
@@ -132,6 +138,20 @@ function buildRunnerProvider(getSettings: () => AppSettings): RunnerProvider {
 }
 
 async function bootstrap(): Promise<void> {
+  // 0. Restore the login-shell PATH BEFORE anything reads process.env.PATH
+  //    (cli-resolver auto-detects codex/claude from it). GUI-launched apps on
+  //    macOS inherit a stripped PATH missing Homebrew / ~/.local/bin, so the
+  //    agent backends can't spawn from the packaged app without this.
+  fixPath();
+  // Self-diagnosing check: log the restored PATH and whether each CLI actually
+  // resolved. This is the single line to grep after a packaged launch to confirm
+  // the fix is working (and to see *which* binary the run will use).
+  const codexBin = resolveCodexPath();
+  const claudeBin = resolveClaudePath();
+  logger.info(
+    `PATH restored: ${process.env.PATH ?? '<unset>'} | codex=${codexBin ?? 'NOT FOUND'} | claude=${claudeBin ?? 'NOT FOUND'}`,
+  );
+
   // 1. DB + migrations.
   const dbPath = join(app.getPath('userData'), DB_FILENAME);
   const db = openDatabase(dbPath);
