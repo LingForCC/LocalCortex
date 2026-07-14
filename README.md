@@ -1,50 +1,61 @@
 # LocalCortex
 
-A local-first Electron + TypeScript desktop app that runs user-defined **natural-language rules** on a schedule to detect updates from external systems (GitHub, GitLab) and route them to a task manager (OmniFocus, Todoist). Rules are executed by **Codex** or **Claude Code**, which reach external systems through **MCP servers**.
+A local-first Electron + TypeScript desktop app whose **main job is the
+handoff**: when a coding-agent session (ZCode, Codex, or Claude Code) finishes,
+LocalCortex automatically creates a **review subtask** under the task-manager
+item (OmniFocus, Todoist, …) the agent was working on — so you're reminded to
+review the agent's work later without watching the session.
 
-The app is a scheduler, an event listener, a prompt manager, and an MCP-server orchestrator. It owns almost no integration code — the agents and the MCP servers do the integration work.
+The agent runs and reaches external systems through **MCP servers**. Under the
+hood LocalCortex is still a scheduler, an event listener, a prompt manager, and
+an MCP-server orchestrator: it owns almost no integration code. A handoff is
+simply an event-triggered rule whose prompt is built from context you attach to
+a session, fulfilled by Codex or Claude Code. That same machinery is available
+for your own general natural-language rules too.
 
-> **Status:** skeleton/scaffolding implementation against the design docs in [`docs/`](./docs). Verified: type-checks, lints, formats, and unit-tests clean (114 tests); and the full Electron app builds, packages to `LocalCortex.app`, and launches (DB migrates, event ingress starts). Real agent execution (live Claude/Codex runs, real external writes) is not exercised here — it needs API keys and is non-deterministic.
+> **Status:** the handoff feature is the focus of the app. It type-checks,
+> lints, formats, and unit-tests clean, the Electron app builds/packages/launches
+> (DB migrates, event ingress starts), and the hook plugins + bridge scripts ship
+> in-tree. Live agent execution (real Claude/Codex runs, real external writes)
+> is not exercised in CI — it needs API keys and is non-deterministic.
 
-## How it works
+---
 
-Every scheduled **tick** (or matching **event**) wakes an agent. The agent:
+## The handoff — what it does
 
-1. fetches source state via MCP (issues, PRs, merge requests),
-2. evaluates the user's natural-language rule against what it finds,
-3. acts on the task manager (create/update tasks) via MCP, and
-4. emits a status block (`active`/`done`/`error`) the app parses to decide whether to keep the rule running.
+The canonical flow:
 
-Two trigger models (architecture.md §3.4):
+1. You hand a long-running agent session off to work on a task-manager item (an
+   OmniFocus task, a Todoist task, …).
+2. While the session runs, you **attach a handoff** to it — the agent's session
+   id plus a little context (e.g. the parent task's id/name).
+3. When the session completes (or a round ends), the agent's **Stop hook** POSTs
+   a `<source>.session-complete` event to LocalCortex.
+4. LocalCortex **correlates** the session id to your handoff, **merges** the
+   context into the event, and an event-triggered **rule** runs an agent with
+   your task manager's MCP server to create the review subtask.
+5. You get the reminder in your task manager — no session-watching required.
 
-- **Tick** — the scheduler fires a rule on `tickIntervalSeconds` (default 60 min).
-- **Event** — a local HTTP listener (`127.0.0.1:4729/event`) receives POSTed events (e.g. a Codex session completing) and fires matching rules immediately.
+Handoffs are **manager-agnostic** and **agent-source-agnostic**: LocalCortex is a
+dumb pipe that stores an opaque session id + an opaque key-value `context` map
+and forwards the context to the fulfilling rule. Adding a new task manager or
+agent source needs no code change — only rule/profile text and (for a new agent
+source) a hook script. A handoff has an **enable/disable** toggle (not a
+fulfilled/pending lifecycle): while enabled it fires on every matching
+session-complete event, so a multi-round session creates a reminder each round.
 
-## Project layout
+A second hook (`UserPromptSubmit`) opens a **popup** the moment you submit a
+prompt in a backed agent, letting you attach (or toggle) a handoff right when
+the session starts — instead of remembering to register it mid-task.
 
-```
-localcortex/
-├── docs/                     # authoritative design docs
-├── src/
-│   ├── shared/               # Zod schemas + TS types (one validation surface)
-│   ├── main/                 # Electron main process
-│   │   ├── index.ts          # app bootstrap, window, wiring
-│   │   ├── preload.ts        # contextBridge → window.api
-│   │   ├── ipc/              # rules / runs / servers / settings handlers
-│   │   ├── scheduler/        # per-rule timers + capped-parallelism queue
-│   │   ├── events/           # HTTP ingress + event→rule matcher + codex hook
-│   │   ├── agent/            # AgentRunner (Claude/Codex), prompt builder, run-loop
-│   │   ├── mcp/              # config loader/resolver/serializer + lifecycle
-│   │   ├── db/               # node:sqlite client, migrations, repositories
-│   │   └── observability/    # logger + run recorder
-│   └── renderer/             # React 19 + Tailwind 4 + shadcn/ui + Zustand
-├── playwright/               # Electron E2E
-└── vitest-shims/             # node:sqlite test shim (see “Testing” below)
-```
+See [`docs/features/handoffs/README.md`](./docs/features/handoffs/README.md) for
+the full flow, context keys, and sample rules.
 
-See [`docs/architecture.md §4`](./docs/architecture.md#4-module-layout) for the full module map.
+---
 
-## Prerequisites
+## Setup
+
+### Prerequisites
 
 - **Node.js ≥ 22.14** (required for the built-in `node:sqlite`). Use nvm:
   ```bash
@@ -52,18 +63,105 @@ See [`docs/architecture.md §4`](./docs/architecture.md#4-module-layout) for the
   ```
 - macOS (the rest is cross-platform).
 
-## Setup
+### 1. Install the app
 
 ```bash
 nvm use v22.14.0
 npm install
+npm start
 ```
 
-On first launch the app seeds the `mcp_servers` DB table with four default
-servers (`github`, `gitlab`, `todoist`, `omnifocus`) — the first three carrying
-`<your-token-here>` placeholders. **Fill in real tokens in the Sources tab**
-before running rules — the lifecycle manager rejects servers that still hold a
-placeholder.
+On first launch the app seeds the `mcp_servers` DB table with default servers
+(`github`, `gitlab`, `todoist`, `omnifocus`) — several carrying
+`<your-token-here>` placeholders, plus builtin coding agents (ZCode, Codex,
+Claude Code) and task managers.
+
+### 2. Install lifecycle hooks on your coding agents (once per agent source)
+
+Each agent source needs a **Stop** hook (to notify LocalCortex when a session
+ends) and, optionally, a **UserPromptSubmit** hook (to open the attach popup on
+prompt submit). The easiest path is the bundled **`localcortex-hook` plugins**,
+which register both hooks across every workspace in one step:
+
+| Agent | Plugin / script |
+| --- | --- |
+| **ZCode** | [`packaging/zcode-hook-plugin/`](./packaging/zcode-hook-plugin/) |
+| **Claude Code** | [`packaging/claude-hook-plugin/`](./packaging/claude-hook-plugin/) (Claude Code is a builtin agent, so no custom catalog entry is needed) |
+| **Codex** | [`packaging/codex-hook-plugin/`](./packaging/codex-hook-plugin/), or wire [`src/main/events/codex-hook.sh`](./src/main/events/codex-hook.sh) + [`codex-prompt-submit-hook.sh`](./src/main/events/codex-prompt-submit-hook.sh) into your Codex hooks config |
+
+Each emits a source-specific event type (`zcode.session-complete`,
+`codex.session-complete`, `claude-code.session-complete`, …) that the matching
+rule listens for. Adding a new agent (Cursor, …) is just a new hook script + a
+custom catalog entry — no LocalCortex code change.
+
+### 3. Configure your task manager's MCP server (Sources tab)
+
+In the **Sources** tab, point the seeded server (e.g. `omnifocus`) at your
+external MCP server and **fill in real tokens** — the lifecycle manager rejects
+servers that still hold a `<your-token-here>` placeholder. You can add any other
+task manager the same way (form or paste JSON from the server's README).
+
+### 4. Create a handoff profile (Handoff profiles tab)
+
+A **handoff profile** binds together the three choices that specialize the app
+around the handoff use case, and **auto-creates the fulfilling rule** for you:
+
+| Choice | What it determines |
+| --- | --- |
+| **Coding agent** | The *event source* — which `session-complete` event type the rule listens to. |
+| **Task manager** | The *sink* — which MCP server creates the review subtask. |
+| **Review-rule backend** | Which runner (**Claude** or **Codex**) fulfills the rule. |
+
+The three choices are **independent** — e.g. you can work in ZCode and have the
+Codex SDK fulfill the review. You can run **multiple profiles simultaneously**:
+because each agent emits a distinct event type, the matcher fires every matching
+profile independently (e.g. ZCode → OmniFocus and Codex → OmniFocus, both
+active). Saving a profile builds a normal event-triggered rule (visible/editable
+under Rules → Advanced), wires its MCP server, and interpolates the task
+manager's task-creation instructions into the prompt so the agent knows the exact
+MCP tool to call.
+
+### 5. Attach a handoff (per task)
+
+When you start a session in a backed agent, the **prompt-submit popup** opens:
+paste/confirm the session id, add context rows (`parentTaskId`,
+`parentTaskName`, …), and **Attach handoff**. (You can also register one any
+time from the **Handoffs** panel.) When the session completes, the review
+subtask is created automatically. Toggle the handoff off when you no longer want
+reminders for that session.
+
+---
+
+## Project layout
+
+```
+localcortex/
+├── docs/                     # authoritative design docs
+├── packaging/                # localcortex-hook plugins (zcode / claude-code / codex)
+├── src/
+│   ├── shared/               # Zod schemas + TS types (one validation surface)
+│   ├── main/                 # Electron main process
+│   │   ├── index.ts          # app bootstrap, window, wiring
+│   │   ├── preload.ts        # contextBridge → window.api
+│   │   ├── ipc/              # rules / runs / servers / handoffs / profiles / settings handlers
+│   │   ├── scheduler/        # per-rule timers + capped-parallelism queue
+│   │   ├── events/           # HTTP ingress + event→rule matcher + handoff enrichment + hooks
+│   │   ├── agent/            # AgentRunner (Claude/Codex), prompt builder, run-loop
+│   │   ├── handoff-profiles/ # profile ↔ rule ownership logic
+│   │   ├── mcp/              # config loader/resolver/serializer + lifecycle
+│   │   ├── db/               # node:sqlite client, migrations, repositories
+│   │   └── observability/    # logger + run recorder
+│   └── renderer/             # React 19 + Tailwind 4 + shadcn/ui + Zustand
+├── playwright/               # Electron E2E
+└── vitest-shims/             # node:sqlite test shim (see "Testing" below)
+```
+
+The renderer shell is organized around the handoff use case: **Home** (profile +
+recent-handoff summary), **Handoff profiles**, **Handoffs**, **Run history**,
+then **Rules** / **Sources** under Advanced and **Settings**.
+
+See [`docs/architecture.md §4`](./docs/architecture.md#4-module-layout) for the
+full module map.
 
 ## Scripts
 
@@ -85,15 +183,17 @@ so it's unit-testable in plain Vitest. The following are fully unit-tested:
 - prompt builder (template rendering + status contract assembly)
 - status-block parser (lenient transcript scan)
 - event matcher (eventType + glob filters)
+- handoff enrichment (session-id correlation + context merge)
+- handoff-profile profile ↔ rule ownership logic
 - MCP config loader / resolver / serializer (Claude + Codex TOML) + placeholder check
 - concurrency queue (capped parallelism)
 - scheduler (cadence math + per-rule timers, fake-timer-injectable)
 - stop-check (agent-signaled + structural backstops)
 - run-loop (full enqueue→stage→run→record→stop-check with a stub runner + in-memory DB)
-- DB migrations + all three repositories (against in-memory `node:sqlite`)
+- DB migrations + repositories (against in-memory `node:sqlite`)
 
 ```bash
-npm test   # 114 tests across 11 files
+npm test
 ```
 
 ### The `node:sqlite` test shim
@@ -135,10 +235,10 @@ row validation, Fastify loopback ingress, electron-log, Vitest + Playwright.
 See [`docs/architecture.md §8`](./docs/architecture.md#8-known-constraints--risks).
 Highlights:
 
-- **Per-cycle cost is unavoidable** — every tick is a full agent run. Default
-  cadence is conservative (60 min) to bound token cost.
-- **No cross-run write deduplication** — ongoing rules (status stays `active`)
-  may create duplicate tasks on each cycle. Users de-duplicate manually.
+- **Per-cycle cost is unavoidable** — every firing is a full agent run.
+- **No cross-run write deduplication** — an enabled handoff may create a
+  duplicate review subtask on each round of a multi-round session. Users
+  de-duplicate manually, or toggle the handoff off.
 - **Credentials are plaintext in the `mcp_servers` SQLite table** (Electron's
   userData directory) — same posture as a `0600` config file. Codex passes
   tokens per-run as `--config` CLI args (visible in `ps`, no file on disk).
@@ -155,6 +255,8 @@ webhook triggers, long-lived MCP pool, code signing/notarize, auto-update.
 
 ## Documentation
 
+- [`docs/features/handoffs/README.md`](./docs/features/handoffs/README.md) — **the handoff flow, context keys, hook setup, and sample rules.**
+- [`docs/features/handoff-profiles/README.md`](./docs/features/handoff-profiles/README.md) — the three-choice profile model and auto-created rules.
 - [`docs/architecture.md`](./docs/architecture.md) — the authoritative architecture reference.
 - [`docs/features/rules/README.md`](./docs/features/rules/README.md) — the user-facing rule config format (fields, types, validation).
 - [`docs/features/mcp-sources/README.md`](./docs/features/mcp-sources/README.md) — the MCP server config format, Sources-tab CRUD, and resolution.
