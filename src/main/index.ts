@@ -352,6 +352,10 @@ async function createWindow(): Promise<void> {
     height: 800,
     show: false,
     title: 'LocalCortex',
+    // Window/taskbar icon. macOS reads the bundle's icon.icns, so this only
+    // affects Linux/Windows; the renderer's bundled favicon is the asset that
+    // is guaranteed to exist next to the built main.js in the .app/.exe.
+    icon: join(__dirname, '../renderer/main_window/favicon.png'),
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,

@@ -70,6 +70,11 @@ const config: ForgeConfig = {
   packagerConfig: {
     name: 'LocalCortex',
     executableName: 'LocalCortex',
+    // App icon (committed under assets/icon/, NOT build/ which is gitignored).
+    // @electron/packager accepts a base path without extension and picks the
+    // right file per platform: icon.icns (macOS), icon.ico (Windows), PNGs
+    // (Linux). Only macOS (maker-dmg) is wired up right now.
+    icon: 'assets/icon/icon',
     asar: true,
     // node:sqlite is a built-in module — no native rebuild, no asarUnpack needed.
     // MCP servers like omnifocus-mcp drive their target app via Apple Events.

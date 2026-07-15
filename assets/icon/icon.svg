@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>LocalCortex</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366F1"/>
+      <stop offset="0.55" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.28" cy="0.22" r="0.85">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.00"/>
+    </radialGradient>
+    <clipPath id="tileClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+  </defs>
+
+  <!-- Tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#tile)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#sheen)"/>
+
+  <g clip-path="url(#tileClip)">
+    <!--
+      Glasses emblem. Two well-separated round lenses with a clear arched
+      bridge between them and temples extending out to the tile edges.
+      Geometry:
+        left lens  center (322, 530)  r=148
+        right lens center (702, 530)  r=148
+        inner edges: left 470, right 554  → 84px gap for the bridge
+    -->
+
+    <!-- Subtle lens tint (filled circles) -->
+    <circle cx="322" cy="530" r="148" fill="#FFFFFF" fill-opacity="0.12"/>
+    <circle cx="702" cy="530" r="148" fill="#FFFFFF" fill-opacity="0.12"/>
+
+    <!-- Glassy reflection arcs inside each lens (amber, upper-left) -->
+    <g fill="none" stroke="#FBBF24" stroke-width="14" stroke-linecap="round" stroke-opacity="0.85">
+      <path d="M 250 478 A 120 120 0 0 1 284 446"/>
+      <path d="M 630 478 A 120 120 0 0 1 664 446"/>
+    </g>
+
+    <!-- Frame: single thick white stroke path for lenses + bridge + temples -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Left lens ring -->
+      <circle cx="322" cy="530" r="148"/>
+      <!-- Right lens ring -->
+      <circle cx="702" cy="530" r="148"/>
+
+      <!-- Bridge: smooth upward arch connecting the two inner-top edges -->
+      <path d="M 470 492 Q 512 452 554 492"/>
+
+      <!-- Left temple: from outer-top of left lens, curving up-left to edge -->
+      <path d="M 178 506 C 168 440 196 384 250 356"/>
+      <!-- Right temple: mirrored -->
+      <path d="M 846 506 C 856 440 828 384 774 356"/>
+    </g>
+  </g>
+</svg>
